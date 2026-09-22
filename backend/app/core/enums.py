@@ -7,8 +7,9 @@ from typing import FrozenSet
 
 
 class UserRole(str, enum.Enum):
-    """RBAC roles per Prompt 1."""
+    """RBAC roles — Super Admin is cross-tenant (Prompt 12)."""
 
+    SUPER_ADMIN = "super_admin"
     ADMIN = "admin"
     PENTESTER = "pentester"
     SOC_ANALYST = "soc_analyst"

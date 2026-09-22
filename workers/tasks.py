@@ -113,6 +113,7 @@ def _normalize_and_ingest(session: Session, *, scan: Scan, engine: ScannerEngine
         scan_id=scan.id,
         findings=findings,
         resolver=resolver,
+        organization_id=scan.organization_id,
         default_asset_id=default_asset,
     )
 

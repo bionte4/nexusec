@@ -37,6 +37,7 @@ def _asset(*, cde: bool = False, name: str = "host-1") -> Asset:
     now = datetime.now(timezone.utc)
     return Asset(
         id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
         name=name,
         asset_type=AssetType.IP,
         criticality=AssetCriticality.HIGH,
@@ -69,6 +70,7 @@ def _vuln(
     now = datetime.now(timezone.utc)
     v = Vulnerability(
         id=uuid.uuid4(),
+        organization_id=asset.organization_id,
         scan_id=uuid.uuid4(),
         asset_id=asset.id,
         fingerprint=uuid.uuid4().hex,

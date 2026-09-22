@@ -15,6 +15,7 @@ from app.core.enums import ScanStatus, ScanType, ScannerEngine
 
 if TYPE_CHECKING:
     from app.models.asset import Asset
+    from app.models.organization import Organization
     from app.models.user import User
     from app.models.vulnerability import Vulnerability
 
@@ -40,6 +41,12 @@ class Scan(Base):
     __tablename__ = "scans"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scan_type: Mapped[ScanType] = mapped_column(
         Enum(ScanType, name="scan_type", native_enum=True),
@@ -78,6 +85,7 @@ class Scan(Base):
     )
 
     created_by_user: Mapped[Optional[User]] = relationship("User", back_populates="scans")
+    organization: Mapped[Organization] = relationship("Organization", back_populates="scans")
     assets: Mapped[list[Asset]] = relationship(
         "Asset", secondary="scan_assets", back_populates="scans"
     )

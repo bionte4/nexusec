@@ -30,8 +30,10 @@ def test_ingest_inserts_then_updates_on_duplicate() -> None:
 
     session = MagicMock()
     # First call: no existing; second call: existing row
+    org_id = uuid.uuid4()
     existing = Vulnerability(
         id=uuid.uuid4(),
+        organization_id=org_id,
         scan_id=scan_id,
         asset_id=asset_id,
         fingerprint="deadbeef",
@@ -52,13 +54,19 @@ def test_ingest_inserts_then_updates_on_duplicate() -> None:
 
     svc = FindingIngestionService(session)
     stats1 = svc.ingest(
-        scan_id=scan_id, findings=[finding], resolver=resolver
+        scan_id=scan_id,
+        findings=[finding],
+        resolver=resolver,
+        organization_id=org_id,
     )
     assert stats1.inserted == 1
     assert session.add.call_count == 1
 
     stats2 = svc.ingest(
-        scan_id=uuid.uuid4(), findings=[finding], resolver=resolver
+        scan_id=uuid.uuid4(),
+        findings=[finding],
+        resolver=resolver,
+        organization_id=org_id,
     )
     assert stats2.updated == 1
     assert existing.status == FindingStatus.REOPENED
@@ -78,6 +86,7 @@ def test_ingest_skips_unmatched_targets() -> None:
         scan_id=uuid.uuid4(),
         findings=[finding],
         resolver=resolver,
+        organization_id=uuid.uuid4(),
         default_asset_id=None,
     )
     assert stats.skipped == 1

@@ -1,4 +1,4 @@
-"""Authentication business logic."""
+"""Authentication business logic with organization bootstrap."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from app.core.security import (
     parse_token,
     verify_password,
 )
+from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.auth import LoginResponse, RegisterRequest, TokenPair
 from app.schemas import UserRead
@@ -50,19 +51,54 @@ class AuthService:
         requested_role = payload.role
 
         if user_count == 0:
-            # Bootstrap: first user becomes admin regardless of payload
-            role = UserRole.ADMIN
-        elif actor is None or actor.role != UserRole.ADMIN:
-            # Non-admins can only self-register as SOC Analyst
-            role = UserRole.SOC_ANALYST
+            # Bootstrap: first user is Super Admin + default organization
+            org = await self._ensure_default_organization()
+            role = UserRole.SUPER_ADMIN
+            organization_id = org.id
+        elif actor is None:
+            raise AuthError(
+                "Registration requires an invite from an Admin",
+                status_code=403,
+            )
+        elif actor.role == UserRole.SUPER_ADMIN:
+            if requested_role == UserRole.SUPER_ADMIN:
+                role = UserRole.SUPER_ADMIN
+                organization_id = payload.organization_id  # may be None (platform)
+            else:
+                role = requested_role
+                organization_id = payload.organization_id or actor.organization_id
+                if organization_id is None:
+                    raise AuthError(
+                        "organization_id is required when Super Admin registers tenant users",
+                        status_code=400,
+                    )
+        elif actor.role == UserRole.ADMIN:
+            # Org admin can only add users to their own tenant
+            role = (
+                requested_role
+                if requested_role
+                in {UserRole.ADMIN, UserRole.PENTESTER, UserRole.SOC_ANALYST}
+                else UserRole.SOC_ANALYST
+            )
+            if role == UserRole.SUPER_ADMIN:
+                raise AuthError("Cannot assign super_admin role", status_code=403)
+            organization_id = actor.organization_id
+            if organization_id is None:
+                raise AuthError("Admin has no organization", status_code=400)
         else:
-            role = requested_role
+            raise AuthError("Only Admins can register users", status_code=403)
+
+        if organization_id is not None:
+            org = await self.db.get(Organization, organization_id)
+            if org is None or not org.is_active:
+                raise AuthError("Organization not found or inactive", status_code=400)
 
         user = User(
             email=payload.email.lower(),
             full_name=payload.full_name,
             hashed_password=hash_password(payload.password),
             role=role,
+            organization_id=organization_id,
             is_active=True,
         )
         self.db.add(user)
@@ -97,9 +133,31 @@ class AuthService:
             raise AuthError("Invalid refresh token", status_code=401)
         return self._issue_tokens(user)
 
+    async def _ensure_default_organization(self) -> Organization:
+        existing = await self.db.scalar(
+            select(Organization).where(Organization.slug == "default")
+        )
+        if existing is not None:
+            return existing
+        org = Organization(
+            name="Default Organization",
+            slug="default",
+            description="Bootstrap platform organization",
+            is_active=True,
+            settings={},
+        )
+        self.db.add(org)
+        await self.db.flush()
+        await self.db.refresh(org)
+        return org
+
     @staticmethod
     def _issue_tokens(user: User) -> TokenPair:
         return TokenPair(
-            access_token=create_access_token(user.id, user.role.value),
+            access_token=create_access_token(
+                user.id,
+                user.role.value,
+                organization_id=user.organization_id,
+            ),
             refresh_token=create_refresh_token(user.id),
         )

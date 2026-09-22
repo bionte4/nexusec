@@ -1,4 +1,4 @@
-"""Scan job endpoints — create and enqueue Celery workers."""
+"""Scan job endpoints — create and enqueue Celery workers (tenant-scoped)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import RequireAnyAuthenticated, RequirePentesterOrAdmin
+from app.core.deps import RequirePentesterOrAdmin, RequireTenant
 from app.core.enums import ScanStatus, ScannerEngine
 from app.schemas.scan import (
     ScanCreate,
@@ -29,6 +29,10 @@ def get_scan_service(db: AsyncSession = Depends(get_db)) -> ScanService:
     return ScanService(db)
 
 
+def _org_scope(tenant: RequireTenant) -> uuid.UUID | None:
+    return None if tenant.cross_tenant else tenant.organization_id
+
+
 @router.post(
     "",
     response_model=ScanEnqueueResponse,
@@ -37,11 +41,15 @@ def get_scan_service(db: AsyncSession = Depends(get_db)) -> ScanService:
 )
 async def create_scan(
     payload: ScanCreate,
+    tenant: RequireTenant,
     current_user: RequirePentesterOrAdmin,
     service: ScanService = Depends(get_scan_service),
 ) -> ScanEnqueueResponse:
+    org_id = tenant.require_organization_id()
     try:
-        scan, task_id = await service.create(payload, created_by_id=current_user.id)
+        scan, task_id = await service.create(
+            payload, organization_id=org_id, created_by_id=current_user.id
+        )
     except ScanValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -56,12 +64,16 @@ async def create_scan(
 )
 async def start_scan(
     scan_id: uuid.UUID,
+    tenant: RequireTenant,
     _: RequirePentesterOrAdmin,
     service: ScanService = Depends(get_scan_service),
 ) -> ScanEnqueueResponse:
+    org = _org_scope(tenant)
     try:
+        # Ensure scan is visible in tenant before enqueue
+        await service.get(scan_id, organization_id=org)
         task_id = await service.enqueue(scan_id)
-        scan = await service.get(scan_id)
+        scan = await service.get(scan_id, organization_id=org)
     except ScanNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ScanValidationError as exc:
@@ -80,7 +92,7 @@ async def start_scan(
     summary="List scans",
 )
 async def list_scans(
-    _: RequireAnyAuthenticated,
+    tenant: RequireTenant,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     status_filter: ScanStatus | None = Query(None, alias="status"),
@@ -92,6 +104,7 @@ async def list_scans(
         page_size=page_size,
         status=status_filter,
         engine=engine,
+        organization_id=_org_scope(tenant),
     )
 
 
@@ -102,10 +115,10 @@ async def list_scans(
 )
 async def get_scan(
     scan_id: uuid.UUID,
-    _: RequireAnyAuthenticated,
+    tenant: RequireTenant,
     service: ScanService = Depends(get_scan_service),
 ) -> ScanRead:
     try:
-        return await service.get(scan_id)
+        return await service.get(scan_id, organization_id=_org_scope(tenant))
     except ScanNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

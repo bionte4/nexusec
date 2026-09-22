@@ -89,11 +89,32 @@ export interface Vulnerability {
   remediation_owner_id: string | null
   remediation_owner_label: string | null
   status_changed_at: string | null
+  threat_intel_metadata?: Record<string, unknown>
   first_seen_at: string
   last_seen_at: string
   created_at: string
   updated_at: string
   comments: VulnerabilityComment[]
+}
+
+export interface AIFPAnalysisResponse {
+  vulnerability_id: string
+  provider: string
+  model: string
+  confidence_score: number
+  is_likely_false_positive: boolean
+  reasoning: string
+  vulnerability: Vulnerability
+}
+
+export interface SocChatResponse {
+  answer: string
+  provider: string
+  model: string
+  intent: Record<string, boolean>
+  stats: Record<string, unknown>
+  sources: Record<string, unknown>[]
+  context_chars: number
 }
 
 export interface VulnerabilityListResponse {

@@ -1,6 +1,8 @@
 import type {
+  AIFPAnalysisResponse,
   DashboardOverview,
   LoginResponse,
+  SocChatResponse,
   VulnListParams,
   Vulnerability,
   VulnerabilityListResponse,
@@ -102,6 +104,21 @@ export const api = {
     return request<Vulnerability>(`/api/v1/vulnerabilities/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    })
+  },
+
+  analyzeFalsePositive(id: string, persist = true) {
+    const q = persist ? '' : '?persist=false'
+    return request<AIFPAnalysisResponse>(
+      `/api/v1/vulnerabilities/${id}/analyze-fp${q}`,
+      { method: 'POST' },
+    )
+  },
+
+  socChat(query: string) {
+    return request<SocChatResponse>('/api/v1/soc/chat', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
     })
   },
 }

@@ -1,12 +1,12 @@
-"""User account model with RBAC roles (Admin, Pentester, SOC Analyst)."""
+"""User account model with RBAC roles and organization tenancy."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +15,7 @@ from app.core.enums import UserRole
 
 if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
+    from app.models.organization import Organization
     from app.models.scan import Scan
 
 
@@ -31,6 +32,12 @@ class User(Base):
         nullable=False,
         index=True,
     )
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -42,6 +49,9 @@ class User(Base):
         nullable=False,
     )
 
+    organization: Mapped[Optional[Organization]] = relationship(
+        "Organization", back_populates="users"
+    )
     scans: Mapped[list[Scan]] = relationship("Scan", back_populates="created_by_user")
     audit_logs: Mapped[list[AuditLog]] = relationship("AuditLog", back_populates="actor")
 

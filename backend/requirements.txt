@@ -12,8 +12,11 @@ bcrypt>=4.2.0
 redis>=5.2.0
 celery[redis]>=5.4.0
 httpx>=0.28.0
+openai>=1.59.0
 email-validator>=2.2.0
 python-multipart>=0.0.17
+prometheus-fastapi-instrumentator>=7.0.0
+prometheus-client>=0.21.0
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
 

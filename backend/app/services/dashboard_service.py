@@ -36,8 +36,23 @@ _RISK_WEIGHTS = {
 
 
 class DashboardService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self, db: AsyncSession, *, organization_id: UUID | None = None
+    ) -> None:
         self.db = db
+        self.organization_id = organization_id
+
+    def _org_vuln(self, *clauses):  # type: ignore[no-untyped-def]
+        filters = list(clauses)
+        if self.organization_id is not None:
+            filters.append(Vulnerability.organization_id == self.organization_id)
+        return filters
+
+    def _org_asset(self, *clauses):  # type: ignore[no-untyped-def]
+        filters = list(clauses)
+        if self.organization_id is not None:
+            filters.append(Asset.organization_id == self.organization_id)
+        return filters
 
     async def overview(self, *, trend_days: int = 30) -> DashboardOverview:
         trend_days = min(max(trend_days, 7), 90)
@@ -46,11 +61,18 @@ class DashboardService:
         asset_risk = await self.asset_risk_posture(limit=50)
         trend = await self.trend(days=trend_days)
 
-        total_assets = int(await self.db.scalar(select(func.count()).select_from(Asset)) or 0)
+        total_assets = int(
+            await self.db.scalar(
+                select(func.count()).select_from(Asset).where(*self._org_asset())
+            )
+            or 0
+        )
         assets_with_active = int(
             await self.db.scalar(
                 select(func.count(func.distinct(Vulnerability.asset_id))).where(
-                    Vulnerability.status.in_(tuple(ACTIVE_FINDING_STATUSES))
+                    *self._org_vuln(
+                        Vulnerability.status.in_(tuple(ACTIVE_FINDING_STATUSES))
+                    )
                 )
             )
             or 0
@@ -69,7 +91,9 @@ class DashboardService:
     async def active_by_severity(self) -> SeverityCount:
         stmt = (
             select(Vulnerability.severity, func.count())
-            .where(Vulnerability.status.in_(tuple(ACTIVE_FINDING_STATUSES)))
+            .where(
+                *self._org_vuln(Vulnerability.status.in_(tuple(ACTIVE_FINDING_STATUSES)))
+            )
             .group_by(Vulnerability.severity)
         )
         rows = (await self.db.execute(stmt)).all()
@@ -88,7 +112,11 @@ class DashboardService:
         )
 
     async def status_breakdown(self) -> dict[str, int]:
-        stmt = select(Vulnerability.status, func.count()).group_by(Vulnerability.status)
+        stmt = (
+            select(Vulnerability.status, func.count())
+            .where(*self._org_vuln())
+            .group_by(Vulnerability.status)
+        )
         rows = (await self.db.execute(stmt)).all()
         return {
             (status.value if isinstance(status, FindingStatus) else str(status)): int(count)
@@ -108,7 +136,9 @@ class DashboardService:
                 func.count().label("cnt"),
             )
             .join(Vulnerability, Vulnerability.asset_id == Asset.id)
-            .where(Vulnerability.status.in_(active))
+            .where(
+                *self._org_vuln(Vulnerability.status.in_(active)),
+            )
             .group_by(
                 Asset.id,
                 Asset.name,
@@ -118,6 +148,8 @@ class DashboardService:
                 Vulnerability.severity,
             )
         )
+        if self.organization_id is not None:
+            stmt = stmt.where(Asset.organization_id == self.organization_id)
         rows = (await self.db.execute(stmt)).all()
 
         by_asset: dict[UUID, AssetRiskSummary] = {}
@@ -171,7 +203,7 @@ class DashboardService:
                 cast(Vulnerability.first_seen_at, Date).label("day"),
                 func.count().label("cnt"),
             )
-            .where(Vulnerability.first_seen_at >= since)
+            .where(*self._org_vuln(Vulnerability.first_seen_at >= since))
             .group_by("day")
             .order_by("day")
         )
@@ -184,8 +216,10 @@ class DashboardService:
                 func.count().label("cnt"),
             )
             .where(
-                Vulnerability.status.in_(tuple(RESOLVED_FINDING_STATUSES)),
-                resolved_ts >= since,
+                *self._org_vuln(
+                    Vulnerability.status.in_(tuple(RESOLVED_FINDING_STATUSES)),
+                    resolved_ts >= since,
+                )
             )
             .group_by("day")
             .order_by("day")

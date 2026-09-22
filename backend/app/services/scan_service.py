@@ -45,9 +45,10 @@ class ScanService:
         self,
         payload: ScanCreate,
         *,
+        organization_id: UUID,
         created_by_id: Optional[UUID] = None,
     ) -> tuple[ScanRead, Optional[str]]:
-        assets = await self._load_assets(payload.asset_ids)
+        assets = await self._load_assets(payload.asset_ids, organization_id=organization_id)
         if len(assets) != len(set(payload.asset_ids)):
             raise ScanValidationError("One or more asset_ids were not found")
 
@@ -55,6 +56,7 @@ class ScanService:
             self._ensure_nmap_targets(assets)
 
         scan = Scan(
+            organization_id=organization_id,
             name=payload.name,
             scan_type=payload.scan_type,
             engine=payload.engine,
@@ -104,8 +106,8 @@ class ScanService:
         await self.db.flush()
         return async_result.id
 
-    async def get(self, scan_id: UUID) -> ScanRead:
-        scan = await self._get_scan(scan_id)
+    async def get(self, scan_id: UUID, *, organization_id: Optional[UUID] = None) -> ScanRead:
+        scan = await self._get_scan(scan_id, organization_id=organization_id)
         return _to_read(scan)
 
     async def list(
@@ -115,10 +117,13 @@ class ScanService:
         page_size: int = 20,
         status: Optional[ScanStatus] = None,
         engine: Optional[ScannerEngine] = None,
+        organization_id: Optional[UUID] = None,
     ) -> ScanListResponse:
         page = max(page, 1)
         page_size = min(max(page_size, 1), 100)
         filters: list[Any] = []
+        if organization_id is not None:
+            filters.append(Scan.organization_id == organization_id)
         if status is not None:
             filters.append(Scan.status == status)
         if engine is not None:
@@ -149,15 +154,24 @@ class ScanService:
             pages=pages,
         )
 
-    async def _get_scan(self, scan_id: UUID) -> Scan:
+    async def _get_scan(
+        self, scan_id: UUID, *, organization_id: Optional[UUID] = None
+    ) -> Scan:
         stmt = select(Scan).options(selectinload(Scan.assets)).where(Scan.id == scan_id)
+        if organization_id is not None:
+            stmt = stmt.where(Scan.organization_id == organization_id)
         scan = (await self.db.execute(stmt)).scalar_one_or_none()
         if scan is None:
             raise ScanNotFoundError(f"Scan {scan_id} not found")
         return scan
 
-    async def _load_assets(self, asset_ids: list[UUID]) -> list[Asset]:
-        stmt = select(Asset).where(Asset.id.in_(asset_ids))
+    async def _load_assets(
+        self, asset_ids: list[UUID], *, organization_id: UUID
+    ) -> list[Asset]:
+        stmt = select(Asset).where(
+            Asset.id.in_(asset_ids),
+            Asset.organization_id == organization_id,
+        )
         return list((await self.db.execute(stmt)).scalars().all())
 
     @staticmethod

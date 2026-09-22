@@ -57,6 +57,56 @@ class Settings(BaseSettings):
     siem_webhook_url: str = ""  # HTTP collector (Elastic/Splunk HEC-compatible JSON)
     siem_hec_token: str = ""
 
+    # --- Threat intelligence (Prompt 11) ---
+    kev_catalog_url: str = (
+        "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    )
+    nvd_api_key: str = ""  # optional — higher NVD rate limits
+    nvd_rate_limit_sleep: float = 0.65
+    threat_intel_sync_enabled: bool = True
+    threat_intel_kev_interval_hours: int = 6
+    threat_intel_enrich_interval_hours: int = 1
+
+    # --- Observability (Prompt 13) ---
+    health_check_timeout_seconds: float = 3.0
+    docker_socket_path: str = "/var/run/docker.sock"
+    worker_hang_threshold_minutes: int = 45
+    prometheus_metrics_enabled: bool = True
+
+    # --- AI remediation (Prompt 14 / 17) ---
+    ai_remediation_enabled: bool = True
+    ai_remediation_provider: str = "auto"  # auto | openai | mock
+    ai_remediation_fallback_mock: bool = True
+    ai_remediation_timeout_seconds: float = 60.0
+    # OpenAI-compatible free providers (Groq, OpenRouter, …) — Prompt 17
+    ai_api_key: str = ""  # AI_API_KEY
+    ai_base_url: str = ""  # AI_BASE_URL e.g. https://api.groq.com/openai/v1
+    ai_model: str = ""  # AI_MODEL e.g. llama-3.3-70b-versatile
+    ai_force_json_response: bool = False  # set true if provider supports response_format
+
+    # --- AI false-positive analysis (Prompt 15) ---
+    ai_fp_enabled: bool = True
+    ai_fp_provider: str = "auto"  # auto | openai | anthropic | mock
+    ai_fp_fallback_mock: bool = True
+    ai_fp_timeout_seconds: float = 60.0
+
+    # --- AI SOC ChatOps / RAG (Prompt 16) ---
+    ai_soc_chat_enabled: bool = True
+    ai_soc_chat_provider: str = "auto"  # auto | openai | anthropic | mock
+    ai_soc_chat_fallback_mock: bool = True
+    ai_soc_chat_timeout_seconds: float = 90.0
+    ai_soc_chat_retrieval_limit: int = 25
+    ai_soc_chat_max_sources: int = 40
+    ai_soc_chat_max_query_chars: int = 4000
+
+    # Shared / legacy LLM credentials (Prompts 14–16; still used by FP + ChatOps)
+    openai_api_key: str = ""
+    openai_api_base: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
+    anthropic_api_key: str = ""
+    anthropic_api_base: str = "https://api.anthropic.com"
+    anthropic_model: str = "claude-3-5-haiku-latest"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

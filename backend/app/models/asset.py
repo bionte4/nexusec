@@ -14,6 +14,7 @@ from app.core.database import Base
 from app.core.enums import AssetCriticality, AssetType
 
 if TYPE_CHECKING:
+    from app.models.organization import Organization
     from app.models.scan import Scan
     from app.models.vulnerability import Vulnerability
 
@@ -22,6 +23,12 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     asset_type: Mapped[AssetType] = mapped_column(
         Enum(AssetType, name="asset_type", native_enum=True),
@@ -65,6 +72,7 @@ class Asset(Base):
         nullable=False,
     )
 
+    organization: Mapped[Organization] = relationship("Organization", back_populates="assets")
     scans: Mapped[list[Scan]] = relationship(
         "Scan", secondary="scan_assets", back_populates="assets"
     )

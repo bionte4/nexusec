@@ -22,8 +22,16 @@ celery_app = Celery(
     "nexusec",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["workers.tasks", "workers.integration_tasks"],
+    include=[
+        "workers.tasks",
+        "workers.integration_tasks",
+        "workers.threat_intel_tasks",
+        "workers.observability_tasks",
+    ],
 )
+
+_kev_hours = max(1, int(settings.threat_intel_kev_interval_hours))
+_enrich_hours = max(1, int(settings.threat_intel_enrich_interval_hours))
 
 celery_app.conf.update(
     task_serializer="json",
@@ -42,5 +50,31 @@ celery_app.conf.update(
     task_routes={
         "scans.*": {"queue": "scans"},
         "integrations.*": {"queue": "integrations"},
+        "threat_intel.*": {"queue": "default"},
+        "observability.*": {"queue": "default"},
     },
+    beat_schedule=(
+        {
+            "threat-intel-kev-sync": {
+                "task": "threat_intel.sync_kev",
+                "schedule": float(_kev_hours * 3600),
+            },
+            "threat-intel-enrich": {
+                "task": "threat_intel.enrich_vulnerabilities",
+                "schedule": float(_enrich_hours * 3600),
+                "kwargs": {"limit": 1000, "fetch_nvd": True, "only_unenriched": False},
+            },
+            "observability-heartbeat": {
+                "task": "observability.heartbeat",
+                "schedule": 60.0,
+            },
+        }
+        if settings.threat_intel_sync_enabled
+        else {
+            "observability-heartbeat": {
+                "task": "observability.heartbeat",
+                "schedule": 60.0,
+            },
+        }
+    ),
 )

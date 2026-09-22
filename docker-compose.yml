@@ -121,6 +121,43 @@ services:
     tmpfs:
       - /tmp:size=256m,mode=1777
 
+  beat:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    restart: unless-stopped
+    command:
+      [
+        "celery",
+        "-A",
+        "workers.celery_app.celery_app",
+        "beat",
+        "--loglevel=INFO",
+      ]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nexusec}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexusec}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      APP_ENV: ${APP_ENV:-production}
+      DEBUG: "false"
+      THREAT_INTEL_SYNC_ENABLED: ${THREAT_INTEL_SYNC_ENABLED:-true}
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    networks:
+      - nexusec-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+
   scanner-worker:
     build:
       context: .

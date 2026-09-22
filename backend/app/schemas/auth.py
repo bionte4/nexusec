@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from pydantic import BaseModel, EmailStr, Field
 
 from app.core.enums import UserRole
@@ -28,6 +30,7 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=12, max_length=128)
     role: UserRole = UserRole.SOC_ANALYST
+    organization_id: uuid.UUID | None = None  # Super Admin may assign
 
 
 class AuthUserRead(UserRead):

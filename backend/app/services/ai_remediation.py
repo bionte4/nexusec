@@ -1,0 +1,429 @@
+"""AI-powered vulnerability remediation via OpenAI-compatible LLM APIs.
+
+Uses the official ``openai`` Python SDK with ``AI_API_KEY`` / ``AI_BASE_URL``
+so free providers (Groq, OpenRouter, etc.) work without code changes.
+Falls back to a deterministic mock when no API key is configured.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import re
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    OpenAI,
+    RateLimitError,
+)
+
+from app.core.config import Settings, get_settings
+from app.core.enums import Severity
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = """You are a secure coding assistant for a SOC / vulnerability-assessment platform.
+Given a vulnerability finding, produce remediation guidance.
+
+Respond with ONLY valid JSON (no markdown fences) using this schema:
+{
+  "explanation": "Clear explanation of why the vulnerability occurs (2-4 sentences).",
+  "remediation_steps": "Numbered step-by-step secure remediation / mitigation guidance.",
+  "patch_example": "A secure code snippet or configuration patch example. Prefer defensive coding; never include exploit payloads."
+}
+Be concise, accurate, and security-focused. If the context is network/infra, provide config/hardening steps instead of application code.
+"""
+
+
+@dataclass(frozen=True)
+class VulnerabilityContext:
+    title: str
+    description: Optional[str]
+    cwe_id: Optional[str]
+    severity: Severity | str
+    asset_type: Optional[str] = None
+    cve_id: Optional[str] = None
+    affected_component: Optional[str] = None
+    port: Optional[int] = None
+    owasp_category: Optional[str] = None
+
+
+@dataclass
+class RemediationResult:
+    explanation: str
+    remediation_steps: str
+    patch_example: str
+    provider: str
+    model: str
+    markdown: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "explanation": self.explanation,
+            "remediation_steps": self.remediation_steps,
+            "patch_example": self.patch_example,
+            "provider": self.provider,
+            "model": self.model,
+            "markdown": self.markdown,
+        }
+
+
+class AIRemediationError(Exception):
+    def __init__(self, message: str, *, status_code: int = 502) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _severity_str(severity: Severity | str) -> str:
+    return severity.value if isinstance(severity, Severity) else str(severity)
+
+
+def resolve_ai_credentials(settings: Settings) -> tuple[str, str, str]:
+    """Return (api_key, base_url, model) preferring AI_* then OPENAI_* envs."""
+    api_key = (settings.ai_api_key or settings.openai_api_key or "").strip()
+    base_url = (settings.ai_base_url or settings.openai_api_base or "").strip()
+    if not base_url:
+        base_url = "https://api.openai.com/v1"
+    model = (settings.ai_model or settings.openai_model or "gpt-4o-mini").strip()
+    return api_key, base_url.rstrip("/"), model
+
+
+def build_openai_client(settings: Optional[Settings] = None) -> OpenAI:
+    settings = settings or get_settings()
+    api_key, base_url, _ = resolve_ai_credentials(settings)
+    if not api_key:
+        raise AIRemediationError("AI_API_KEY (or OPENAI_API_KEY) is not configured", status_code=400)
+    timeout = settings.ai_remediation_timeout_seconds
+    return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=1)
+
+
+def build_async_openai_client(settings: Optional[Settings] = None) -> AsyncOpenAI:
+    settings = settings or get_settings()
+    api_key, base_url, _ = resolve_ai_credentials(settings)
+    if not api_key:
+        raise AIRemediationError("AI_API_KEY (or OPENAI_API_KEY) is not configured", status_code=400)
+    timeout = settings.ai_remediation_timeout_seconds
+    return AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=1)
+
+
+def build_user_prompt(ctx: VulnerabilityContext) -> str:
+    return (
+        f"Title: {ctx.title}\n"
+        f"Severity: {_severity_str(ctx.severity)}\n"
+        f"CWE: {ctx.cwe_id or 'unknown'}\n"
+        f"CVE: {ctx.cve_id or 'n/a'}\n"
+        f"Asset type: {ctx.asset_type or 'unknown'}\n"
+        f"Affected component: {ctx.affected_component or 'n/a'}\n"
+        f"Port: {ctx.port if ctx.port is not None else 'n/a'}\n"
+        f"OWASP: {ctx.owasp_category or 'n/a'}\n"
+        f"Description: {ctx.description or 'No description provided.'}\n"
+    )
+
+
+def format_remediation_markdown(result: dict[str, str], *, provider: str, model: str) -> str:
+    return (
+        f"## Why this vulnerability occurs\n\n{result['explanation'].strip()}\n\n"
+        f"## Remediation steps\n\n{result['remediation_steps'].strip()}\n\n"
+        f"## Secure patch / configuration example\n\n"
+        f"```\n{result['patch_example'].strip()}\n```\n\n"
+        f"_Generated by NexuSec AI remediation "
+        f"({provider}/{model}). Review before applying._\n"
+    )
+
+
+def _extract_json(text: str) -> dict[str, Any]:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        return json.loads(match.group(0))
+    raise AIRemediationError("LLM response was not valid JSON")
+
+
+def _normalize_payload(data: dict[str, Any]) -> dict[str, str]:
+    explanation = str(data.get("explanation") or "").strip()
+    steps = str(
+        data.get("remediation_steps") or data.get("steps") or data.get("remediation") or ""
+    ).strip()
+    patch = str(
+        data.get("patch_example") or data.get("patch") or data.get("code_snippet") or ""
+    ).strip()
+    if not explanation or not steps or not patch:
+        raise AIRemediationError("LLM response missing required remediation fields")
+    return {
+        "explanation": explanation,
+        "remediation_steps": steps,
+        "patch_example": patch,
+    }
+
+
+def _map_openai_error(exc: Exception) -> AIRemediationError:
+    if isinstance(exc, RateLimitError):
+        return AIRemediationError(
+            "LLM rate limit exceeded — retry shortly or switch provider",
+            status_code=429,
+        )
+    if isinstance(exc, APITimeoutError):
+        return AIRemediationError("LLM request timed out", status_code=504)
+    if isinstance(exc, APIConnectionError):
+        return AIRemediationError("Could not reach LLM API (connection error)", status_code=502)
+    return AIRemediationError(f"LLM provider error: {exc.__class__.__name__}", status_code=502)
+
+
+def mock_remediation(ctx: VulnerabilityContext) -> RemediationResult:
+    """Deterministic fallback when LLM credentials are not configured."""
+    sev = _severity_str(ctx.severity)
+    cwe = ctx.cwe_id or "CWE-unknown"
+    asset = ctx.asset_type or "application"
+    component = ctx.affected_component or ctx.title
+    explanation = (
+        f"The finding '{ctx.title}' ({cwe}, severity {sev}) typically arises when "
+        f"input validation, access control, or secure configuration is insufficient "
+        f"on a {asset} asset. Without remediation, attackers may exploit "
+        f"{component} to impact confidentiality, integrity, or availability."
+    )
+    steps = (
+        "1. Confirm the finding against the affected asset and reproduce safely in a lab.\n"
+        "2. Apply the vendor patch or secure configuration for the affected component.\n"
+        "3. Harden related controls (authN/Z, TLS, least privilege, input validation).\n"
+        "4. Add regression tests or scanner coverage for this CWE/CVE class.\n"
+        "5. Re-scan and verify the finding is resolved before closing the ticket."
+    )
+    if (ctx.asset_type or "").lower() in {"ip", "domain", "cloud_resource", "network"}:
+        patch = (
+            f"# Example hardening for {component}\n"
+            "# Restrict exposure and enforce strong crypto / auth\n"
+            "listen_address: 127.0.0.1\n"
+            "tls_min_version: 1.2\n"
+            "auth_required: true\n"
+            "# Remove default credentials and unused services\n"
+        )
+    else:
+        patch = (
+            "# Example: parameterized query / safe handling\n"
+            "def get_user(db, email: str):\n"
+            "    # NEVER concatenate user input into SQL\n"
+            '    return db.execute("SELECT id FROM users WHERE email = :email", '
+            '{"email": email}).fetchone()\n'
+        )
+    payload = {
+        "explanation": explanation,
+        "remediation_steps": steps,
+        "patch_example": patch,
+    }
+    return RemediationResult(
+        explanation=explanation,
+        remediation_steps=steps,
+        patch_example=patch,
+        provider="mock",
+        model="template-v1",
+        markdown=format_remediation_markdown(payload, provider="mock", model="template-v1"),
+    )
+
+
+def _provider_label(base_url: str) -> str:
+    host = base_url.lower()
+    if "groq" in host:
+        return "groq"
+    if "openrouter" in host:
+        return "openrouter"
+    if "openai.com" in host:
+        return "openai"
+    return "openai-compatible"
+
+
+async def _chat_completion_json(
+    *,
+    user_prompt: str,
+    settings: Settings,
+) -> tuple[dict[str, str], str, str]:
+    """Call OpenAI-compatible chat API; return (normalized payload, provider, model)."""
+    api_key, base_url, model = resolve_ai_credentials(settings)
+    if not api_key:
+        raise AIRemediationError("AI_API_KEY (or OPENAI_API_KEY) is not configured", status_code=400)
+
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=settings.ai_remediation_timeout_seconds,
+        max_retries=1,
+    )
+    provider = _provider_label(base_url)
+    try:
+        # Some free providers ignore response_format; still request JSON in the prompt.
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "temperature": 0.2,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if "openai.com" in base_url.lower() or settings.ai_force_json_response:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = await client.chat.completions.create(**kwargs)
+        content = (resp.choices[0].message.content or "").strip()
+        if not content:
+            raise AIRemediationError("Empty LLM response")
+        return _normalize_payload(_extract_json(content)), provider, model
+    except AIRemediationError:
+        raise
+    except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+        raise _map_openai_error(exc) from exc
+    except Exception as exc:
+        logger.exception("OpenAI-compatible remediation call failed")
+        raise _map_openai_error(exc) from exc
+    finally:
+        await client.close()
+
+
+def generate_ai_remediation_patch(cwe_id: str, description: str) -> str:
+    """Generate remediation markdown for a CWE + description (sync OpenAI SDK).
+
+    Compatible with Groq / OpenRouter / OpenAI via ``AI_API_KEY`` + ``AI_BASE_URL``.
+    """
+    settings = get_settings()
+    if not settings.ai_remediation_enabled:
+        raise AIRemediationError("AI remediation is disabled", status_code=503)
+
+    ctx = VulnerabilityContext(
+        title=f"Finding related to {cwe_id or 'unknown CWE'}",
+        description=description,
+        cwe_id=cwe_id,
+        severity=Severity.UNKNOWN,
+    )
+    api_key, base_url, model = resolve_ai_credentials(settings)
+    if not api_key:
+        if settings.ai_remediation_fallback_mock:
+            return mock_remediation(ctx).markdown
+        raise AIRemediationError("AI_API_KEY (or OPENAI_API_KEY) is not configured", status_code=400)
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=settings.ai_remediation_timeout_seconds,
+        max_retries=1,
+    )
+    provider = _provider_label(base_url)
+    user_prompt = (
+        f"CWE: {cwe_id or 'unknown'}\n"
+        f"Description: {description or 'No description provided.'}\n"
+        "Produce explanation, remediation steps, and a secure patch example."
+    )
+    try:
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "temperature": 0.2,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if "openai.com" in base_url.lower() or settings.ai_force_json_response:
+            kwargs["response_format"] = {"type": "json_object"}
+        resp = client.chat.completions.create(**kwargs)
+        content = (resp.choices[0].message.content or "").strip()
+        if not content:
+            raise AIRemediationError("Empty LLM response")
+        parsed = _normalize_payload(_extract_json(content))
+        return format_remediation_markdown(parsed, provider=provider, model=model)
+    except AIRemediationError:
+        if settings.ai_remediation_fallback_mock:
+            logger.warning("Falling back to mock remediation after AIRemediationError")
+            return mock_remediation(ctx).markdown
+        raise
+    except (RateLimitError, APITimeoutError, APIConnectionError) as exc:
+        mapped = _map_openai_error(exc)
+        if settings.ai_remediation_fallback_mock:
+            logger.warning("Falling back to mock remediation after %s", mapped)
+            return mock_remediation(ctx).markdown
+        raise mapped from exc
+    except Exception as exc:
+        mapped = _map_openai_error(exc)
+        if settings.ai_remediation_fallback_mock:
+            logger.warning("Falling back to mock remediation after provider error")
+            return mock_remediation(ctx).markdown
+        raise mapped from exc
+    finally:
+        client.close()
+
+
+async def generate_ai_remediation_patch_async(cwe_id: str, description: str) -> str:
+    """Async wrapper around :func:`generate_ai_remediation_patch` for FastAPI handlers."""
+    return await asyncio.to_thread(generate_ai_remediation_patch, cwe_id, description)
+
+
+class AIRemediationService:
+    def __init__(self, settings: Optional[Settings] = None) -> None:
+        self.settings = settings or get_settings()
+
+    @property
+    def provider(self) -> str:
+        return (self.settings.ai_remediation_provider or "auto").lower().strip()
+
+    def resolve_provider(self) -> str:
+        """Pick provider: explicit setting, else OpenAI-compatible key, else mock."""
+        chosen = self.provider
+        api_key, _, _ = resolve_ai_credentials(self.settings)
+        if chosen in {"openai", "openai-compatible", "groq", "openrouter"}:
+            if not api_key:
+                raise AIRemediationError(
+                    "AI_API_KEY (or OPENAI_API_KEY) is not configured", status_code=400
+                )
+            return "openai"
+        if chosen == "mock":
+            return "mock"
+        if chosen == "anthropic":
+            # Legacy path no longer used for remediation; prefer AI_* OpenAI-compatible.
+            if api_key:
+                return "openai"
+            raise AIRemediationError(
+                "Configure AI_API_KEY/AI_BASE_URL for remediation (Anthropic direct removed)",
+                status_code=400,
+            )
+        # auto
+        if api_key:
+            return "openai"
+        return "mock"
+
+    async def generate(self, ctx: VulnerabilityContext) -> RemediationResult:
+        if not self.settings.ai_remediation_enabled:
+            raise AIRemediationError("AI remediation is disabled", status_code=503)
+
+        provider = self.resolve_provider()
+        if provider == "mock":
+            return mock_remediation(ctx)
+
+        user_prompt = build_user_prompt(ctx)
+        try:
+            parsed, provider_label, model = await _chat_completion_json(
+                user_prompt=user_prompt, settings=self.settings
+            )
+            return RemediationResult(
+                explanation=parsed["explanation"],
+                remediation_steps=parsed["remediation_steps"],
+                patch_example=parsed["patch_example"],
+                provider=provider_label,
+                model=model,
+                markdown=format_remediation_markdown(
+                    parsed, provider=provider_label, model=model
+                ),
+            )
+        except AIRemediationError:
+            if self.settings.ai_remediation_fallback_mock:
+                logger.warning("Falling back to mock remediation after provider error")
+                return mock_remediation(ctx)
+            raise

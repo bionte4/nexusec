@@ -29,7 +29,11 @@ SKIP_PATH_PREFIXES = (
 
 SKIP_EXACT_PATHS = {
     "/",
+    "/health",
+    "/metrics",
     "/api/v1/health",
+    "/api/v1/health/live",
+    "/api/v1/health/ready",
     "/api/v1/auth/login",
     "/api/v1/auth/login/form",
     "/api/v1/auth/refresh",
@@ -49,18 +53,33 @@ def _client_ip(request: Request) -> Optional[str]:
     return None
 
 
-def _actor_id_from_request(request: Request) -> Optional[UUID]:
+def _actor_from_request(request: Request) -> tuple[Optional[UUID], Optional[UUID]]:
+    """Return (actor_id, organization_id) from Bearer JWT."""
     auth = request.headers.get("authorization") or ""
     if not auth.lower().startswith("bearer "):
-        return None
+        return None, None
     token = auth.split(" ", 1)[1].strip()
     try:
         payload = decode_token(token)
         if payload.get("type") != TOKEN_TYPE_ACCESS:
-            return None
-        return UUID(str(payload["sub"]))
+            return None, None
+        actor_id = UUID(str(payload["sub"]))
+        org_raw = payload.get("org")
+        org_id = UUID(str(org_raw)) if org_raw else None
+        header_org = request.headers.get("x-organization-id")
+        if header_org:
+            try:
+                org_id = UUID(header_org)
+            except ValueError:
+                pass
+        return actor_id, org_id
     except (JWTError, ValueError, TypeError, KeyError):
-        return None
+        return None, None
+
+
+def _actor_id_from_request(request: Request) -> Optional[UUID]:
+    actor_id, _ = _actor_from_request(request)
+    return actor_id
 
 
 def _parse_resource(path: str) -> tuple[str, Optional[str]]:
@@ -94,7 +113,7 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
 
         resource_type, resource_id = _parse_resource(path)
         action = f"{request.method} {path}"
-        actor_id = _actor_id_from_request(request)
+        actor_id, organization_id = _actor_from_request(request)
 
         try:
             async with AsyncSessionLocal() as session:
@@ -104,6 +123,7 @@ class AuditTrailMiddleware(BaseHTTPMiddleware):
                     resource_type=resource_type,
                     resource_id=resource_id,
                     actor_id=actor_id,
+                    organization_id=organization_id,
                     details={
                         "method": request.method,
                         "path": path,

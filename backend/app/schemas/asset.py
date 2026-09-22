@@ -102,6 +102,7 @@ class AssetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: uuid.UUID
+    organization_id: uuid.UUID
     name: str
     asset_type: AssetType
     criticality: AssetCriticality

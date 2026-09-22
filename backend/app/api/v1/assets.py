@@ -1,4 +1,4 @@
-"""Asset inventory management endpoints (RBAC-protected)."""
+"""Asset inventory management endpoints (RBAC + tenant scoped)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import RequireAnyAuthenticated, RequirePentesterOrAdmin
+from app.core.deps import RequirePentesterOrAdmin, RequireTenant
 from app.core.enums import AssetCriticality, AssetType
 from app.schemas.asset import (
     AssetCreate,
@@ -33,19 +33,23 @@ def get_asset_service(db: AsyncSession = Depends(get_db)) -> AssetService:
 )
 async def create_asset(
     payload: AssetCreate,
+    tenant: RequireTenant,
     current_user: RequirePentesterOrAdmin,
     service: AssetService = Depends(get_asset_service),
 ) -> AssetRead:
-    return await service.create(payload, created_by_id=current_user.id)
+    org_id = tenant.require_organization_id()
+    return await service.create(
+        payload, organization_id=org_id, created_by_id=current_user.id
+    )
 
 
 @router.get(
     "",
     response_model=AssetListResponse,
-    summary="List assets (authenticated)",
+    summary="List assets (authenticated, tenant-scoped)",
 )
 async def list_assets(
-    _: RequireAnyAuthenticated,
+    tenant: RequireTenant,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(
@@ -68,6 +72,7 @@ async def list_assets(
         criticality=criticality,
         environment=environment,
         is_cde_scope=is_cde_scope,
+        organization_id=None if tenant.cross_tenant else tenant.organization_id,
     )
 
 
@@ -78,11 +83,14 @@ async def list_assets(
 )
 async def get_asset(
     asset_id: uuid.UUID,
-    _: RequireAnyAuthenticated,
+    tenant: RequireTenant,
     service: AssetService = Depends(get_asset_service),
 ) -> AssetRead:
     try:
-        return await service.get(asset_id)
+        return await service.get(
+            asset_id,
+            organization_id=None if tenant.cross_tenant else tenant.organization_id,
+        )
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -98,11 +106,16 @@ async def get_asset(
 async def update_asset(
     asset_id: uuid.UUID,
     payload: AssetUpdate,
+    tenant: RequireTenant,
     _: RequirePentesterOrAdmin,
     service: AssetService = Depends(get_asset_service),
 ) -> AssetRead:
     try:
-        return await service.update(asset_id, payload)
+        return await service.update(
+            asset_id,
+            payload,
+            organization_id=None if tenant.cross_tenant else tenant.organization_id,
+        )
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -117,11 +130,15 @@ async def update_asset(
 )
 async def delete_asset(
     asset_id: uuid.UUID,
+    tenant: RequireTenant,
     _: RequirePentesterOrAdmin,
     service: AssetService = Depends(get_asset_service),
 ) -> None:
     try:
-        await service.delete(asset_id)
+        await service.delete(
+            asset_id,
+            organization_id=None if tenant.cross_tenant else tenant.organization_id,
+        )
     except AssetNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

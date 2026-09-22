@@ -122,6 +122,23 @@ POST /api/v1/integrations/vulnerabilities/{id}/dispatch
 
 Configure via `.env` (`WEBHOOK_*`, `TICKET_*`, `SIEM_*`). Celery task: `integrations.dispatch_finding`.
 
+## Multi-Tenancy (Prompt 12)
+
+Strict org isolation: `Organization` tenant + `organization_id` on users, assets, scans, vulnerabilities, and audit logs.
+
+- Role `super_admin` — cross-tenant; scope with header `X-Organization-Id`
+- Roles `admin` / `pentester` / `soc_analyst` — locked to their organization
+- First registered user becomes Super Admin and seeds the `default` org
+
+```bash
+POST /api/v1/organizations                      # Super Admin onboard client
+GET  /api/v1/organizations
+GET  /api/v1/organizations/me
+GET  /api/v1/organizations/me/metrics
+GET  /api/v1/organizations/{id}/metrics
+POST /api/v1/organizations/{id}/workspace-token/rotate
+```
+
 ## Custom Scanner (Prompt 8)
 
 Asyncio engine in `scanners/python/nexusec_scanner` with rate limits, circuit breakers, and exclusions.
@@ -132,3 +149,60 @@ POST /api/v1/scans  {"engine":"nexusec", "asset_ids":[...], "config":{"exclusion
 ```
 
 Celery task: `scans.run_nexusec` → ingest via `nexusec` normalizer.
+
+## Threat Intelligence (Prompt 11)
+
+Periodic Celery Beat jobs sync the [CISA KEV catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) and enrich findings via NVD references (public exploit heuristics). Matching CVEs get `is_actively_exploited`, optional severity promotion, and an RBVM `threat_risk_score`.
+
+```bash
+GET  /api/v1/threat-intel/status
+GET  /api/v1/threat-intel/actively-exploited
+POST /api/v1/threat-intel/sync          # Admin — queue KEV sync + enrichment
+```
+
+Configure: `KEV_CATALOG_URL`, `NVD_API_KEY`, `THREAT_INTEL_*`. Compose service: `beat`.
+
+## Observability (Prompt 13)
+
+```bash
+GET /health                      # liveness (also /api/v1/health)
+GET /api/v1/health/ready         # Postgres + Redis readiness
+GET /api/v1/health/detailed      # + Celery workers + Docker daemon (Admin)
+GET /api/v1/health/workers       # worker nodes, tool binaries, hung scans (Admin)
+GET /metrics                     # Prometheus (prometheus-fastapi-instrumentator)
+```
+
+Custom gauges: `nexusec_active_scans`, `nexusec_celery_workers`, `nexusec_hung_scans`, `nexusec_scanner_tool_available`.
+
+## AI Remediation (Prompt 14)
+
+```bash
+POST /api/v1/vulnerabilities/{id}/generate-ai-patch
+```
+
+Providers: OpenAI-compatible via official ``openai`` SDK (`AI_API_KEY` + `AI_BASE_URL` — Groq, OpenRouter, OpenAI). Without keys, a secure template mock is used. Core helper: `generate_ai_remediation_patch(cwe_id, description)`. Output is saved to `vulnerability.remediation`.
+
+## AI False-Positive Analysis (Prompt 15)
+
+```bash
+POST /api/v1/vulnerabilities/{id}/analyze-fp
+```
+
+Evaluates finding context (port, banner, evidence, asset) and returns structured JSON:
+
+- `confidence_score` (0–1)
+- `is_likely_false_positive` (bool)
+- `reasoning` (SOC analyst note)
+
+Persisted under `vulnerability.threat_intel_metadata.ai_fp_analysis`. Same LLM keys as Prompt 14; mock heuristics when keys are absent (`AI_FP_PROVIDER=auto|openai|anthropic|mock`).
+
+## AI SOC ChatOps / RAG (Prompt 16)
+
+```bash
+POST /api/v1/soc/chat
+Content-Type: application/json
+
+{"query": "Which assets currently violate PCI-DSS requirements?"}
+```
+
+Lightweight RAG: keyword intent classification → PostgreSQL retrieval (assets, scans, vulnerabilities) → LLM (or mock) answer. Response includes `answer`, `intent`, `stats`, and `sources`.

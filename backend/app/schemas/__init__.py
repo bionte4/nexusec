@@ -34,6 +34,7 @@ class UserRead(ORMModel):
     email: EmailStr
     full_name: str
     role: UserRole
+    organization_id: uuid.UUID | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

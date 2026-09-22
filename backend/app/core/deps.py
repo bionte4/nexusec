@@ -1,11 +1,11 @@
-"""FastAPI dependencies for authentication and RBAC."""
+"""FastAPI dependencies for authentication, RBAC, and tenant scope."""
 
 from __future__ import annotations
 
 from typing import Annotated, Callable, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.enums import UserRole
 from app.core.security import TOKEN_TYPE_ACCESS, parse_token
+from app.core.tenancy import TenantContext, resolve_tenant_context
 from app.models.user import User
 
 settings = get_settings()
@@ -66,14 +67,28 @@ async def get_current_user_optional(
     return user
 
 
+async def get_tenant_context(
+    current_user: Annotated[User, Depends(get_current_user)],
+    x_organization_id: Annotated[Optional[str], Header(alias="X-Organization-Id")] = None,
+) -> TenantContext:
+    return resolve_tenant_context(current_user, x_organization_id=x_organization_id)
+
+
 def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
-    """Dependency factory: require authenticated user with one of the given roles."""
+    """Dependency factory: require authenticated user with one of the given roles.
+
+    Super Admin satisfies any check that includes Admin.
+    """
 
     allowed = set(allowed_roles)
 
     async def _dependency(
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
+        if current_user.role == UserRole.SUPER_ADMIN and (
+            UserRole.SUPER_ADMIN in allowed or UserRole.ADMIN in allowed
+        ):
+            return current_user
         if current_user.role not in allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -88,12 +103,30 @@ def require_roles(*allowed_roles: UserRole) -> Callable[..., User]:
 
 
 # Convenience role bundles
-RequireAdmin = Annotated[User, Depends(require_roles(UserRole.ADMIN))]
+RequireSuperAdmin = Annotated[User, Depends(require_roles(UserRole.SUPER_ADMIN))]
+RequireAdmin = Annotated[
+    User, Depends(require_roles(UserRole.SUPER_ADMIN, UserRole.ADMIN))
+]
 RequirePentesterOrAdmin = Annotated[
-    User, Depends(require_roles(UserRole.ADMIN, UserRole.PENTESTER))
+    User,
+    Depends(
+        require_roles(
+            UserRole.SUPER_ADMIN,
+            UserRole.ADMIN,
+            UserRole.PENTESTER,
+        )
+    ),
 ]
 RequireAnyAuthenticated = Annotated[User, Depends(get_current_user)]
 RequireSocOrAbove = Annotated[
     User,
-    Depends(require_roles(UserRole.ADMIN, UserRole.PENTESTER, UserRole.SOC_ANALYST)),
+    Depends(
+        require_roles(
+            UserRole.SUPER_ADMIN,
+            UserRole.ADMIN,
+            UserRole.PENTESTER,
+            UserRole.SOC_ANALYST,
+        )
+    ),
 ]
+RequireTenant = Annotated[TenantContext, Depends(get_tenant_context)]

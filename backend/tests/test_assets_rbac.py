@@ -20,6 +20,7 @@ from tests.conftest import make_user
 def _asset_read() -> AssetRead:
     return AssetRead(
         id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
         name="host-1",
         asset_type=AssetType.IP,
         criticality=AssetCriticality.HIGH,
@@ -73,7 +74,7 @@ async def test_pentester_can_create_asset() -> None:
     async def _user():
         return pentester
 
-    async def _create(self, payload, *, created_by_id=None):
+    async def _create(self, payload, *, organization_id=None, created_by_id=None):
         return asset
 
     app.dependency_overrides[get_current_user] = _user

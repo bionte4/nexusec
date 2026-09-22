@@ -23,8 +23,11 @@ from app.core.database import Base  # noqa: E402
 from app.models import (  # noqa: E402, F401
     Asset,
     AuditLog,
+    Organization,
     Scan,
     ScanAsset,
+    ThreatIntelCve,
+    ThreatIntelSyncRun,
     User,
     Vulnerability,
     VulnerabilityComment,

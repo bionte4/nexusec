@@ -30,9 +30,11 @@ class AssetService:
         self,
         payload: AssetCreate,
         *,
+        organization_id: uuid.UUID,
         created_by_id: Optional[uuid.UUID] = None,
     ) -> AssetRead:
         asset = Asset(
+            organization_id=organization_id,
             name=payload.name,
             asset_type=payload.asset_type,
             criticality=payload.criticality,
@@ -55,8 +57,10 @@ class AssetService:
         await self.db.refresh(asset)
         return _to_read(asset)
 
-    async def get(self, asset_id: uuid.UUID) -> AssetRead:
-        asset = await self._get_or_raise(asset_id)
+    async def get(
+        self, asset_id: uuid.UUID, *, organization_id: Optional[uuid.UUID] = None
+    ) -> AssetRead:
+        asset = await self._get_or_raise(asset_id, organization_id=organization_id)
         return _to_read(asset)
 
     async def list(
@@ -69,6 +73,7 @@ class AssetService:
         criticality: Optional[AssetCriticality] = None,
         environment: Optional[str] = None,
         is_cde_scope: Optional[bool] = None,
+        organization_id: Optional[uuid.UUID] = None,
     ) -> AssetListResponse:
         page = max(page, 1)
         page_size = min(max(page_size, 1), 100)
@@ -79,6 +84,7 @@ class AssetService:
             criticality=criticality,
             environment=environment,
             is_cde_scope=is_cde_scope,
+            organization_id=organization_id,
         )
 
         count_stmt = select(func.count()).select_from(Asset)
@@ -107,8 +113,14 @@ class AssetService:
             pages=pages,
         )
 
-    async def update(self, asset_id: uuid.UUID, payload: AssetUpdate) -> AssetRead:
-        asset = await self._get_or_raise(asset_id)
+    async def update(
+        self,
+        asset_id: uuid.UUID,
+        payload: AssetUpdate,
+        *,
+        organization_id: Optional[uuid.UUID] = None,
+    ) -> AssetRead:
+        asset = await self._get_or_raise(asset_id, organization_id=organization_id)
         data = payload.model_dump(exclude_unset=True)
 
         if "metadata" in data:
@@ -121,14 +133,23 @@ class AssetService:
         await self.db.refresh(asset)
         return _to_read(asset)
 
-    async def delete(self, asset_id: uuid.UUID) -> None:
-        asset = await self._get_or_raise(asset_id)
+    async def delete(
+        self, asset_id: uuid.UUID, *, organization_id: Optional[uuid.UUID] = None
+    ) -> None:
+        asset = await self._get_or_raise(asset_id, organization_id=organization_id)
         await self.db.delete(asset)
         await self.db.flush()
 
-    async def _get_or_raise(self, asset_id: uuid.UUID) -> Asset:
+    async def _get_or_raise(
+        self,
+        asset_id: uuid.UUID,
+        *,
+        organization_id: Optional[uuid.UUID] = None,
+    ) -> Asset:
         asset = await self.db.get(Asset, asset_id)
         if asset is None:
+            raise AssetNotFoundError(f"Asset {asset_id} not found")
+        if organization_id is not None and asset.organization_id != organization_id:
             raise AssetNotFoundError(f"Asset {asset_id} not found")
         return asset
 
@@ -140,8 +161,12 @@ class AssetService:
         criticality: Optional[AssetCriticality],
         environment: Optional[str],
         is_cde_scope: Optional[bool],
+        organization_id: Optional[uuid.UUID] = None,
     ) -> list[Any]:
         filters: list[Any] = []
+
+        if organization_id is not None:
+            filters.append(Asset.organization_id == organization_id)
 
         if search:
             pattern = f"%{search.strip()}%"

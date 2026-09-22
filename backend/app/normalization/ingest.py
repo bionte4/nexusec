@@ -83,6 +83,7 @@ class FindingIngestionService:
         scan_id: UUID,
         findings: list[NormalizedFinding],
         resolver: AssetResolver,
+        organization_id: UUID,
         default_asset_id: Optional[UUID] = None,
         enrich: bool = True,
     ) -> IngestStats:
@@ -109,6 +110,7 @@ class FindingIngestionService:
 
             if existing is None:
                 row = Vulnerability(
+                    organization_id=organization_id,
                     scan_id=scan_id,
                     asset_id=asset_id,
                     fingerprint=fingerprint,

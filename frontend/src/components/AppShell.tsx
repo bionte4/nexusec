@@ -3,6 +3,7 @@ import {
   Activity,
   LayoutDashboard,
   LogOut,
+  MessageSquareText,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
@@ -11,6 +12,7 @@ import { useAuth } from '../auth/AuthContext'
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
+  { to: '/soc-chat', label: 'SOC Chat', icon: MessageSquareText },
 ]
 
 export function AppShell() {

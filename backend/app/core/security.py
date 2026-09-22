@@ -53,15 +53,19 @@ def create_access_token(
     user_id: UUID,
     role: str,
     *,
+    organization_id: Optional[UUID] = None,
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     settings = get_settings()
     delta = expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
+    claims: dict[str, Any] = {"role": role}
+    if organization_id is not None:
+        claims["org"] = str(organization_id)
     return _create_token(
         subject=str(user_id),
         token_type=TOKEN_TYPE_ACCESS,
         expires_delta=delta,
-        extra_claims={"role": role},
+        extra_claims=claims,
     )
 
 

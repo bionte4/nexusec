@@ -64,6 +64,7 @@ class NormalizationService:
             scan_id=scan.id,
             findings=findings,
             resolver=resolver,
+            organization_id=scan.organization_id,
             default_asset_id=default_asset,
         )
 
@@ -131,6 +132,7 @@ async def normalize_scan_raw_result(
         if existing is None:
             db.add(
                 Vulnerability(
+                    organization_id=scan.organization_id,
                     scan_id=scan.id,
                     asset_id=asset_id,
                     fingerprint=fingerprint,

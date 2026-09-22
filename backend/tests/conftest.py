@@ -24,6 +24,7 @@ def make_user(
     role: UserRole = UserRole.SOC_ANALYST,
     is_active: bool = True,
     email: str = "user@example.com",
+    organization_id: uuid.UUID | None = None,
 ) -> User:
     user = User(
         id=uuid.uuid4(),
@@ -31,6 +32,7 @@ def make_user(
         full_name="Test User",
         hashed_password=hash_password("SecurePass123!"),
         role=role,
+        organization_id=organization_id if organization_id is not None else uuid.uuid4(),
         is_active=is_active,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),

@@ -21,12 +21,14 @@ class AuditService:
         resource_type: str,
         resource_id: Optional[str] = None,
         actor_id: Optional[UUID] = None,
+        organization_id: Optional[UUID] = None,
         details: Optional[dict[str, Any]] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
         status_code: Optional[int] = None,
     ) -> AuditLog:
         entry = AuditLog(
+            organization_id=organization_id,
             actor_id=actor_id,
             action=action,
             resource_type=resource_type,

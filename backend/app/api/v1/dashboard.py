@@ -1,4 +1,4 @@
-"""SOC dashboard metrics endpoints."""
+"""SOC dashboard metrics endpoints (tenant-scoped)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import RequireAnyAuthenticated
+from app.core.deps import RequireTenant
 from app.schemas.vulnerability import (
     AssetRiskSummary,
     DashboardOverview,
@@ -18,17 +18,20 @@ from app.services.dashboard_service import DashboardService
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
-def get_dashboard_service(db: AsyncSession = Depends(get_db)) -> DashboardService:
-    return DashboardService(db)
+def get_dashboard_service(
+    tenant: RequireTenant,
+    db: AsyncSession = Depends(get_db),
+) -> DashboardService:
+    org_id = None if tenant.cross_tenant else tenant.organization_id
+    return DashboardService(db, organization_id=org_id)
 
 
 @router.get(
     "/overview",
     response_model=DashboardOverview,
-    summary="SOC dashboard overview (RBAC: any authenticated role)",
+    summary="SOC dashboard overview (tenant-scoped)",
 )
 async def dashboard_overview(
-    _: RequireAnyAuthenticated,
     trend_days: int = Query(30, ge=7, le=90),
     service: DashboardService = Depends(get_dashboard_service),
 ) -> DashboardOverview:
@@ -41,7 +44,6 @@ async def dashboard_overview(
     summary="Active vulnerabilities by severity",
 )
 async def dashboard_severity(
-    _: RequireAnyAuthenticated,
     service: DashboardService = Depends(get_dashboard_service),
 ) -> SeverityCount:
     return await service.active_by_severity()
@@ -53,7 +55,6 @@ async def dashboard_severity(
     summary="Asset risk posture summary",
 )
 async def dashboard_asset_risk(
-    _: RequireAnyAuthenticated,
     limit: int = Query(50, ge=1, le=200),
     service: DashboardService = Depends(get_dashboard_service),
 ) -> list[AssetRiskSummary]:
@@ -66,7 +67,6 @@ async def dashboard_asset_risk(
     summary="Open vs resolved vulnerability trend",
 )
 async def dashboard_trends(
-    _: RequireAnyAuthenticated,
     days: int = Query(30, ge=7, le=90),
     service: DashboardService = Depends(get_dashboard_service),
 ) -> list[TrendPoint]:
