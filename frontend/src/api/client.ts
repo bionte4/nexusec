@@ -287,4 +287,8 @@ export const api = {
       method: 'POST',
     })
   },
+
+  getComplianceReport(kind: 'iso27001' | 'pci-dss' | 'gdpr') {
+    return request<Record<string, unknown>>(`/api/v1/reports/${kind}`)
+  },
 }

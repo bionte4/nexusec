@@ -47,12 +47,12 @@ export function AdminPage() {
   const load = useCallback(async () => {
     if (usingMock || token === 'demo') {
       setLoading(false)
-      setError('Administration requires a live API session (not demo mode).')
+      setError(t('admin.liveRequired'))
       return
     }
     if (!isAdmin) {
       setLoading(false)
-      setError('Administration is limited to Admin and Super Admin roles.')
+      setError(t('admin.roleDenied'))
       return
     }
     setLoading(true)
@@ -88,14 +88,12 @@ export function AdminPage() {
       }
     } catch (err) {
       setError(
-        err instanceof ApiError
-          ? err.message
-          : 'Failed to load administration data',
+        err instanceof ApiError ? err.message : t('admin.loadFailed'),
       )
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, tab, token, user?.role, usingMock])
+  }, [isAdmin, tab, token, user?.role, usingMock, t])
 
   useEffect(() => {
     void load()
@@ -111,7 +109,7 @@ export function AdminPage() {
         ...invite,
         organization_id: user?.organization_id,
       })
-      setNotice(`User ${invite.email} created.`)
+      setNotice(t('admin.userCreated', { email: invite.email }))
       setInvite({
         email: '',
         full_name: '',
@@ -120,7 +118,7 @@ export function AdminPage() {
       })
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Invite failed')
+      setError(err instanceof ApiError ? err.message : t('admin.inviteFailed'))
     } finally {
       setBusy(false)
     }
@@ -137,36 +135,40 @@ export function AdminPage() {
         slug: newOrg.slug || undefined,
         description: newOrg.description || undefined,
       })
-      setNotice(`Organization “${newOrg.name}” created.`)
+      setNotice(t('admin.orgCreated', { name: newOrg.name }))
       setNewOrg({ name: '', slug: '', description: '' })
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Create org failed')
+      setError(
+        err instanceof ApiError ? err.message : t('admin.createOrgFailed'),
+      )
     } finally {
       setBusy(false)
     }
   }
 
-  const tabs: { id: Tab; label: string; icon: typeof Users; adminOnly?: boolean }[] =
-    [
-      { id: 'overview', label: 'Overview', icon: Shield },
-      { id: 'users', label: 'Users', icon: Users },
-      {
-        id: 'organizations',
-        label: 'Organizations',
-        icon: Building2,
-        adminOnly: true,
-      },
-      { id: 'system', label: 'System', icon: HeartPulse },
-    ]
+  const tabs: {
+    id: Tab
+    label: string
+    icon: typeof Users
+    adminOnly?: boolean
+  }[] = [
+    { id: 'overview', label: t('admin.tabOverview'), icon: Shield },
+    { id: 'users', label: t('admin.tabUsers'), icon: Users },
+    {
+      id: 'organizations',
+      label: t('admin.tabOrganizations'),
+      icon: Building2,
+      adminOnly: true,
+    },
+    { id: 'system', label: t('admin.tabSystem'), icon: HeartPulse },
+  ]
 
   if (!isAdmin && !loading) {
     return (
       <div className="panel rounded-xl p-8">
         <h1 className="text-lg font-semibold">{t('admin.title')}</h1>
-        <p className="mt-2 text-sm text-surface-400">
-          {t('admin.denied')}
-        </p>
+        <p className="mt-2 text-sm text-surface-400">{t('admin.denied')}</p>
       </div>
     )
   }
@@ -181,9 +183,7 @@ export function AdminPage() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
             {t('admin.title')}
           </h1>
-          <p className="mt-1 text-sm text-surface-400">
-            {t('admin.subtitle')}
-          </p>
+          <p className="mt-1 text-sm text-surface-400">{t('admin.subtitle')}</p>
         </div>
         {user && (
           <div className="rounded-lg border border-surface-700 bg-surface-850 px-4 py-3 text-right">
@@ -199,7 +199,7 @@ export function AdminPage() {
 
       <div className="flex flex-wrap gap-2">
         {tabs
-          .filter((t) => !t.adminOnly || user?.role === 'super_admin')
+          .filter((item) => !item.adminOnly || user?.role === 'super_admin')
           .map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -231,56 +231,77 @@ export function AdminPage() {
 
       {loading ? (
         <div className="py-16 text-center text-sm text-surface-400">
-          Loading administration…
+          {t('admin.loading')}
         </div>
       ) : (
         <>
           {tab === 'overview' && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard label="Organization" value={org?.name ?? '—'} />
               <MetricCard
-                label="Users"
+                label={t('admin.organization')}
+                value={org?.name ?? '—'}
+              />
+              <MetricCard
+                label={t('admin.users')}
                 value={String(metrics?.users ?? users.length)}
               />
               <MetricCard
-                label="Open findings"
+                label={t('admin.openFindings')}
                 value={String(metrics?.open_vulnerabilities ?? '—')}
               />
               <MetricCard
-                label="Critical open"
+                label={t('admin.criticalOpen')}
                 value={String(metrics?.critical_open ?? '—')}
               />
               <div className="panel col-span-full rounded-xl p-5 md:col-span-2">
                 <h2 className="text-sm font-semibold text-surface-100">
-                  Current tenant
+                  {t('admin.currentTenant')}
                 </h2>
                 <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                   <div>
-                    <dt className="text-surface-400">Slug</dt>
+                    <dt className="text-surface-400">{t('admin.slug')}</dt>
                     <dd className="font-mono text-surface-100">
                       {org?.slug ?? '—'}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-surface-400">Status</dt>
-                    <dd>{org?.is_active ? 'Active' : 'Inactive / n/a'}</dd>
+                    <dt className="text-surface-400">{t('admin.status')}</dt>
+                    <dd>
+                      {org?.is_active ? t('admin.active') : t('admin.inactive')}
+                    </dd>
                   </div>
                   <div className="sm:col-span-2">
-                    <dt className="text-surface-400">Description</dt>
+                    <dt className="text-surface-400">
+                      {t('admin.description')}
+                    </dt>
                     <dd className="text-surface-300">
-                      {org?.description || 'No description'}
+                      {org?.description || t('admin.noDescription')}
                     </dd>
                   </div>
                 </dl>
               </div>
               <div className="panel col-span-full rounded-xl p-5 md:col-span-2">
-                <h2 className="text-sm font-semibold">Security posture</h2>
+                <h2 className="text-sm font-semibold">
+                  {t('admin.securityPosture')}
+                </h2>
                 <ul className="mt-3 space-y-2 text-sm text-surface-300">
-                  <li>Assets: {metrics?.assets ?? '—'}</li>
-                  <li>Scans: {metrics?.scans ?? '—'}</li>
-                  <li>CDE-scoped assets: {metrics?.cde_assets ?? '—'}</li>
                   <li>
-                    Actively exploited: {metrics?.actively_exploited ?? '—'}
+                    {t('admin.metricAssets', {
+                      count: metrics?.assets ?? '—',
+                    })}
+                  </li>
+                  <li>
+                    {t('admin.metricScans', { count: metrics?.scans ?? '—' })}
+                  </li>
+                  <li>
+                    {t('admin.metricCde', {
+                      count: metrics?.cde_assets ?? '—',
+                    })}
+                  </li>
+                  <li>
+                    {t('admin.metricExploited', {
+                      count: metrics?.actively_exploited ?? '—',
+                    })}
                   </li>
                 </ul>
               </div>
@@ -293,17 +314,17 @@ export function AdminPage() {
                 <div className="border-b border-surface-700 px-5 py-4">
                   <h2 className="flex items-center gap-2 text-sm font-semibold">
                     <Users className="h-4 w-4 text-accent" />
-                    Users ({users.length})
+                    {t('admin.usersHeading', { count: users.length })}
                   </h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-surface-850 font-mono text-[11px] uppercase tracking-wide text-surface-400">
                       <tr>
-                        <th className="px-4 py-3">Name</th>
-                        <th className="px-4 py-3">Email</th>
-                        <th className="px-4 py-3">Role</th>
-                        <th className="px-4 py-3">Active</th>
+                        <th className="px-4 py-3">{t('admin.colName')}</th>
+                        <th className="px-4 py-3">{t('admin.colEmail')}</th>
+                        <th className="px-4 py-3">{t('admin.colRole')}</th>
+                        <th className="px-4 py-3">{t('admin.colActive')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -320,7 +341,7 @@ export function AdminPage() {
                             {roleLabel(u.role)}
                           </td>
                           <td className="px-4 py-3">
-                            {u.is_active ? 'Yes' : 'No'}
+                            {u.is_active ? t('admin.yes') : t('admin.no')}
                           </td>
                         </tr>
                       ))}
@@ -335,12 +356,12 @@ export function AdminPage() {
               >
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <UserPlus className="h-4 w-4 text-accent" />
-                  Invite user
+                  {t('admin.inviteUser')}
                 </h2>
                 <input
                   required
                   type="email"
-                  placeholder="Email"
+                  placeholder={t('admin.email')}
                   value={invite.email}
                   onChange={(e) =>
                     setInvite((s) => ({ ...s, email: e.target.value }))
@@ -349,7 +370,7 @@ export function AdminPage() {
                 />
                 <input
                   required
-                  placeholder="Full name"
+                  placeholder={t('admin.fullName')}
                   value={invite.full_name}
                   onChange={(e) =>
                     setInvite((s) => ({ ...s, full_name: e.target.value }))
@@ -360,7 +381,7 @@ export function AdminPage() {
                   required
                   type="password"
                   minLength={12}
-                  placeholder="Temp password (min 12)"
+                  placeholder={t('admin.tempPassword')}
                   value={invite.password}
                   onChange={(e) =>
                     setInvite((s) => ({ ...s, password: e.target.value }))
@@ -374,11 +395,13 @@ export function AdminPage() {
                   }
                   className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-sm"
                 >
-                  <option value="soc_analyst">SOC Analyst</option>
-                  <option value="pentester">Pentester</option>
-                  <option value="admin">Admin</option>
+                  <option value="soc_analyst">{t('admin.roleSocAnalyst')}</option>
+                  <option value="pentester">{t('admin.rolePentester')}</option>
+                  <option value="admin">{t('admin.roleAdmin')}</option>
                   {user?.role === 'super_admin' && (
-                    <option value="super_admin">Super Admin</option>
+                    <option value="super_admin">
+                      {t('admin.roleSuperAdmin')}
+                    </option>
                   )}
                 </select>
                 <button
@@ -386,7 +409,7 @@ export function AdminPage() {
                   disabled={busy}
                   className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-surface-950 disabled:opacity-50"
                 >
-                  {busy ? 'Creating…' : 'Create user'}
+                  {busy ? t('admin.creating') : t('admin.createUser')}
                 </button>
               </form>
             </div>
@@ -397,7 +420,7 @@ export function AdminPage() {
               <div className="panel overflow-hidden rounded-xl">
                 <div className="border-b border-surface-700 px-5 py-4">
                   <h2 className="text-sm font-semibold">
-                    Organizations ({orgs.length})
+                    {t('admin.orgsHeading', { count: orgs.length })}
                   </h2>
                 </div>
                 <ul className="divide-y divide-surface-800">
@@ -405,7 +428,8 @@ export function AdminPage() {
                     <li key={o.id} className="px-5 py-4">
                       <div className="font-medium">{o.name}</div>
                       <div className="font-mono text-xs text-surface-400">
-                        {o.slug} · {o.is_active ? 'active' : 'inactive'}
+                        {o.slug} ·{' '}
+                        {o.is_active ? t('admin.active') : t('admin.inactive')}
                       </div>
                       {o.description && (
                         <p className="mt-1 text-sm text-surface-300">
@@ -422,11 +446,11 @@ export function AdminPage() {
               >
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <Building2 className="h-4 w-4 text-accent" />
-                  Onboard tenant
+                  {t('admin.onboardTenant')}
                 </h2>
                 <input
                   required
-                  placeholder="Organization name"
+                  placeholder={t('admin.orgName')}
                   value={newOrg.name}
                   onChange={(e) =>
                     setNewOrg((s) => ({ ...s, name: e.target.value }))
@@ -434,7 +458,7 @@ export function AdminPage() {
                   className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-sm"
                 />
                 <input
-                  placeholder="Slug (optional)"
+                  placeholder={t('admin.slugOptional')}
                   value={newOrg.slug}
                   onChange={(e) =>
                     setNewOrg((s) => ({ ...s, slug: e.target.value }))
@@ -442,7 +466,7 @@ export function AdminPage() {
                   className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-sm"
                 />
                 <textarea
-                  placeholder="Description"
+                  placeholder={t('admin.descriptionPlaceholder')}
                   value={newOrg.description}
                   onChange={(e) =>
                     setNewOrg((s) => ({ ...s, description: e.target.value }))
@@ -455,7 +479,7 @@ export function AdminPage() {
                   disabled={busy}
                   className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-surface-950 disabled:opacity-50"
                 >
-                  {busy ? 'Creating…' : 'Create organization'}
+                  {busy ? t('admin.creating') : t('admin.createOrg')}
                 </button>
               </form>
             </div>
@@ -464,10 +488,19 @@ export function AdminPage() {
           {tab === 'system' && (
             <div className="space-y-4">
               <SystemStatusPanel
-                title="Platform dependencies"
+                title={t('admin.platformDeps')}
                 payload={health}
+                loadingLabel={t('admin.loadingPanel', {
+                  title: t('admin.platformDeps').toLowerCase(),
+                })}
               />
-              <SystemStatusPanel title="Workers & tools" payload={workers} />
+              <SystemStatusPanel
+                title={t('admin.workersTools')}
+                payload={workers}
+                loadingLabel={t('admin.loadingPanel', {
+                  title: t('admin.workersTools').toLowerCase(),
+                })}
+              />
             </div>
           )}
         </>
@@ -493,14 +526,16 @@ function statusColor(status: string | undefined): string {
 function SystemStatusPanel({
   title,
   payload,
+  loadingLabel,
 }: {
   title: string
   payload: Record<string, unknown> | null
+  loadingLabel: string
 }) {
   if (!payload) {
     return (
       <div className="panel rounded-xl p-5 text-sm text-surface-400">
-        Loading {title.toLowerCase()}…
+        {loadingLabel}
       </div>
     )
   }

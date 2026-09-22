@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -121,6 +122,7 @@ export function DashboardPage() {
           hint={t('dashboard.withActive', { count: data.assets_with_active_findings })}
           icon={Server}
           tone="accent"
+          to="/assets"
         />
         <SummaryCard
           label={t('dashboard.openCritical')}
@@ -128,6 +130,7 @@ export function DashboardPage() {
           hint={t('dashboard.immediateTriage')}
           icon={ShieldAlert}
           tone="danger"
+          to="/vulnerabilities?severity=critical&status=open"
         />
         <SummaryCard
           label={t('dashboard.openHigh')}
@@ -135,6 +138,7 @@ export function DashboardPage() {
           hint={t('dashboard.activeTotal', { count: sev.total })}
           icon={AlertTriangle}
           tone="warn"
+          to="/vulnerabilities?severity=high&status=open"
         />
         <SummaryCard
           label={t('dashboard.compliance')}
@@ -142,6 +146,7 @@ export function DashboardPage() {
           hint={t('dashboard.complianceHint')}
           icon={CheckCircle2}
           tone={complianceKey === 'compliant' ? 'ok' : 'warn'}
+          to="/vulnerabilities"
         />
       </section>
 
@@ -171,6 +176,10 @@ export function DashboardPage() {
               const pct = sev.total ? Math.round((count / sev.total) * 100) : 0
               return (
                 <li key={label}>
+                  <Link
+                    to={`/vulnerabilities?severity=${label}`}
+                    className="block transition hover:opacity-90"
+                  >
                   <div className="mb-1 flex justify-between font-mono text-[11px]">
                     <span className="uppercase tracking-wider text-surface-400">
                       {label}
@@ -185,6 +194,7 @@ export function DashboardPage() {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
+                  </Link>
                 </li>
               )
             })}
@@ -193,10 +203,11 @@ export function DashboardPage() {
           <h2 className="mb-3 mt-8 text-sm font-medium">{t('dashboard.topRisk')}</h2>
           <ul className="space-y-2">
             {data.asset_risk_posture.slice(0, 5).map((a) => (
-              <li
-                key={a.asset_id}
-                className="flex items-center justify-between rounded-lg bg-surface-900/60 px-3 py-2"
-              >
+              <li key={a.asset_id}>
+                <Link
+                  to={`/vulnerabilities?asset_id=${a.asset_id}`}
+                  className="flex items-center justify-between rounded-lg bg-surface-900/60 px-3 py-2 transition hover:bg-surface-800/60"
+                >
                 <div>
                   <div className="text-sm">{a.asset_name}</div>
                   <div className="font-mono text-[10px] text-surface-400">
@@ -207,6 +218,7 @@ export function DashboardPage() {
                 <div className="font-mono text-sm text-warn">
                   {a.risk_score.toFixed(0)}
                 </div>
+                </Link>
               </li>
             ))}
             {data.asset_risk_posture.length === 0 ? (

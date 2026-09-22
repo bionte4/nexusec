@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Filter, Search, X } from 'lucide-react'
+import { Download, Filter, Search, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import type {
   FindingStatus,
@@ -36,24 +36,65 @@ function complianceKeys(v: Vulnerability): string[] {
   return Object.keys(v.compliance_metadata ?? {})
 }
 
+function csvEscape(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replaceAll('"', '""')}"`
+  return value
+}
+
+function downloadText(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export function VulnerabilitiesPage() {
   const { usingMock, setUsingMock, token } = useAuth()
   const { t } = useLocale()
   const [searchParams, setSearchParams] = useSearchParams()
   const filterAssetId = searchParams.get('asset_id') || ''
   const filterScanId = searchParams.get('scan_id') || ''
+  const severityParam = (searchParams.get('severity') || '') as Severity | ''
+  const statusParam = (searchParams.get('status') || '') as FindingStatus | ''
 
   const [items, setItems] = useState<Vulnerability[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
-  const [severity, setSeverity] = useState<Severity | ''>('')
-  const [status, setStatus] = useState<FindingStatus | ''>('')
+  const [severity, setSeverity] = useState<Severity | ''>(
+    severityParam && SEVERITIES.includes(severityParam) ? severityParam : '',
+  )
+  const [status, setStatus] = useState<FindingStatus | ''>(
+    statusParam && STATUSES.includes(statusParam) ? statusParam : '',
+  )
   const [assetQuery, setAssetQuery] = useState('')
   const [compliance, setCompliance] = useState<string>('')
   const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkStatus, setBulkStatus] = useState<FindingStatus>('in_progress')
+  const [bulkOwner, setBulkOwner] = useState('')
 
+  useEffect(() => {
+    if (severityParam && SEVERITIES.includes(severityParam)) {
+      setSeverity(severityParam)
+    } else if (!severityParam) {
+      setSeverity('')
+    }
+  }, [severityParam])
+
+  useEffect(() => {
+    if (statusParam && STATUSES.includes(statusParam)) {
+      setStatus(statusParam)
+    } else if (!statusParam) {
+      setStatus('')
+    }
+  }, [statusParam])
   useEffect(() => {
     let cancelled = false
 
@@ -85,6 +126,7 @@ export function VulnerabilitiesPage() {
           setItems(res.items)
           setTotal(res.total)
           setUsingMock(false)
+          setSelected(new Set())
         }
       } catch (err) {
         if (!cancelled) {
@@ -163,31 +205,240 @@ export function VulnerabilitiesPage() {
     const next = new URLSearchParams(searchParams)
     next.delete('asset_id')
     next.delete('scan_id')
+    next.delete('severity')
+    next.delete('status')
     setSearchParams(next, { replace: true })
+    setSeverity('')
+    setStatus('')
+  }
+
+  function onSeverityChange(next: Severity | '') {
+    setSeverity(next)
+    const params = new URLSearchParams(searchParams)
+    if (next) params.set('severity', next)
+    else params.delete('severity')
+    setSearchParams(params, { replace: true })
+  }
+
+  function onStatusChange(next: FindingStatus | '') {
+    setStatus(next)
+    const params = new URLSearchParams(searchParams)
+    if (next) params.set('status', next)
+    else params.delete('status')
+    setSearchParams(params, { replace: true })
+  }
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selected.size === filtered.length) {
+      setSelected(new Set())
+      return
+    }
+    setSelected(new Set(filtered.map((v) => v.id)))
+  }
+
+  async function applyBulkStatus() {
+    if (selected.size === 0) return
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (usingMock || token === 'demo') {
+        setItems((prev) =>
+          prev.map((v) =>
+            selected.has(v.id) ? { ...v, status: bulkStatus } : v,
+          ),
+        )
+        setNotice(t('vulns.bulkUpdated', { count: selected.size }))
+      } else {
+        const ids = [...selected]
+        await Promise.all(
+          ids.map((id) => api.updateVulnerability(id, { status: bulkStatus })),
+        )
+        setItems((prev) =>
+          prev.map((v) =>
+            selected.has(v.id) ? { ...v, status: bulkStatus } : v,
+          ),
+        )
+        setNotice(t('vulns.bulkUpdated', { count: ids.length }))
+      }
+      setSelected(new Set())
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('vulns.bulkFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function applyBulkOwner() {
+    if (selected.size === 0 || !bulkOwner.trim()) return
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    const label = bulkOwner.trim()
+    try {
+      if (usingMock || token === 'demo') {
+        setItems((prev) =>
+          prev.map((v) =>
+            selected.has(v.id)
+              ? { ...v, remediation_owner_label: label }
+              : v,
+          ),
+        )
+        setNotice(t('vulns.bulkOwnerUpdated', { count: selected.size }))
+      } else {
+        const ids = [...selected]
+        await Promise.all(ids.map((id) => api.assignOwner(id, label)))
+        setItems((prev) =>
+          prev.map((v) =>
+            selected.has(v.id)
+              ? { ...v, remediation_owner_label: label }
+              : v,
+          ),
+        )
+        setNotice(t('vulns.bulkOwnerUpdated', { count: ids.length }))
+      }
+      setSelected(new Set())
+      setBulkOwner('')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('vulns.bulkFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function exportCsv() {
+    const header = [
+      'id',
+      'title',
+      'severity',
+      'status',
+      'cve_id',
+      'cwe_id',
+      'asset_id',
+      'scan_id',
+      'cvss_score',
+      'owner',
+      'source_tool',
+      'compliance',
+    ]
+    const lines = [header.join(',')]
+    for (const v of filtered) {
+      lines.push(
+        [
+          v.id,
+          csvEscape(v.title),
+          v.severity,
+          v.status,
+          v.cve_id ?? '',
+          v.cwe_id ?? '',
+          v.asset_id,
+          v.scan_id,
+          v.cvss_score?.toFixed(1) ?? '',
+          csvEscape(v.remediation_owner_label ?? ''),
+          v.source_tool ?? '',
+          csvEscape(complianceKeys(v).join('|')),
+        ].join(','),
+      )
+    }
+    downloadText(
+      `nexusec-findings-${new Date().toISOString().slice(0, 10)}.csv`,
+      lines.join('\n'),
+      'text/csv;charset=utf-8',
+    )
+    setNotice(t('vulns.csvExported', { count: filtered.length }))
+  }
+
+  async function exportReport(kind: 'iso27001' | 'pci-dss' | 'gdpr') {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (usingMock || token === 'demo') {
+        setError(t('vulns.reportLiveRequired'))
+        return
+      }
+      const report = await api.getComplianceReport(kind)
+      downloadText(
+        `nexusec-${kind}-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(report, null, 2),
+        'application/json',
+      )
+      setNotice(t('vulns.reportExported', { kind }))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('vulns.reportFailed'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
-          {t('vulns.eyebrow')}
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          {t('vulns.title')}
-        </h1>
-        <p className="mt-1 text-sm text-surface-400">
-          {t('vulns.subtitle')}
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
+            {t('vulns.eyebrow')}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            {t('vulns.title')}
+          </h1>
+          <p className="mt-1 text-sm text-surface-400">{t('vulns.subtitle')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={filtered.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {t('vulns.exportCsv')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportReport('iso27001')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            ISO
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportReport('pci-dss')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            PCI-DSS
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportReport('gdpr')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            GDPR
+          </button>
+        </div>
       </header>
 
-      {filterAssetId || filterScanId ? (
+      {filterAssetId || filterScanId || severityParam || statusParam ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent">
           <span>
             {filterScanId
               ? t('vulns.scopedScan', { id: filterScanId.slice(0, 8) })
-              : t('vulns.scopedAsset', { id: filterAssetId.slice(0, 8) })}
-          </span>
-          <button
+              : filterAssetId
+                ? t('vulns.scopedAsset', { id: filterAssetId.slice(0, 8) })
+                : severityParam
+                  ? t('vulns.scopedSeverity', { severity: severityParam })
+                  : `${t('vulns.status')}: ${statusParam}`}
+          </span>          <button
             type="button"
             onClick={clearScopeFilters}
             className="inline-flex items-center gap-1 rounded-md border border-accent/40 px-2 py-0.5 text-[11px] hover:bg-accent/20"
@@ -203,6 +454,11 @@ export function VulnerabilitiesPage() {
           {error}
         </div>
       ) : null}
+      {notice ? (
+        <div className="rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent">
+          {notice}
+        </div>
+      ) : null}
 
       <div className="panel rounded-xl p-4">
         <div className="mb-3 flex items-center gap-2 text-xs text-surface-400">
@@ -216,7 +472,7 @@ export function VulnerabilitiesPage() {
             </span>
             <select
               value={severity}
-              onChange={(e) => setSeverity(e.target.value as Severity | '')}
+              onChange={(e) => onSeverityChange(e.target.value as Severity | '')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
               <option value="">{t('vulns.all')}</option>
@@ -233,7 +489,9 @@ export function VulnerabilitiesPage() {
             </span>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as FindingStatus | '')}
+              onChange={(e) =>
+                onStatusChange(e.target.value as FindingStatus | '')
+              }
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
               <option value="">{t('vulns.all')}</option>
@@ -251,7 +509,7 @@ export function VulnerabilitiesPage() {
             <input
               value={assetQuery}
               onChange={(e) => setAssetQuery(e.target.value)}
-              placeholder="asset id or component"
+              placeholder={t('vulns.assetPlaceholder')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             />
           </label>
@@ -265,9 +523,9 @@ export function VulnerabilitiesPage() {
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
               <option value="">{t('vulns.all')}</option>
-              {COMPLIANCE_TAGS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {COMPLIANCE_TAGS.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
                 </option>
               ))}
             </select>
@@ -289,6 +547,57 @@ export function VulnerabilitiesPage() {
         </div>
       </div>
 
+      {selected.size > 0 ? (
+        <div className="panel flex flex-wrap items-end gap-3 rounded-xl p-4">
+          <div className="text-xs text-surface-300">
+            {t('vulns.selected', { count: selected.size })}
+          </div>
+          <label className="space-y-1">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
+              {t('vulns.bulkStatus')}
+            </span>
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value as FindingStatus)}
+              className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void applyBulkStatus()}
+            className="rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-surface-950 disabled:opacity-50"
+          >
+            {t('vulns.applyStatus')}
+          </button>
+          <label className="space-y-1">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
+              {t('vulns.bulkOwner')}
+            </span>
+            <input
+              value={bulkOwner}
+              onChange={(e) => setBulkOwner(e.target.value)}
+              placeholder={t('vulns.ownerPlaceholder')}
+              className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || !bulkOwner.trim()}
+            onClick={() => void applyBulkOwner()}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            {t('vulns.applyOwner')}
+          </button>
+        </div>
+      ) : null}
+
       <div className="panel overflow-hidden rounded-xl">
         <div className="flex items-center justify-between border-b border-surface-700 px-4 py-3">
           <span className="text-sm text-surface-300">
@@ -298,14 +607,26 @@ export function VulnerabilitiesPage() {
           </span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-left text-sm">
+          <table className="w-full min-w-[920px] text-left text-sm">
             <thead className="bg-surface-900/80 font-mono text-[10px] uppercase tracking-wider text-surface-400">
               <tr>
+                <th className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={
+                      filtered.length > 0 && selected.size === filtered.length
+                    }
+                    onChange={toggleAll}
+                    aria-label={t('vulns.selectAll')}
+                  />
+                </th>
                 <th className="px-4 py-3 font-medium">{t('vulns.colSeverity')}</th>
                 <th className="px-4 py-3 font-medium">{t('vulns.colTitle')}</th>
                 <th className="px-4 py-3 font-medium">{t('vulns.colStatus')}</th>
                 <th className="px-4 py-3 font-medium">{t('vulns.colAsset')}</th>
-                <th className="px-4 py-3 font-medium">{t('vulns.colCompliance')}</th>
+                <th className="px-4 py-3 font-medium">
+                  {t('vulns.colCompliance')}
+                </th>
                 <th className="px-4 py-3 font-medium">{t('vulns.colOwner')}</th>
                 <th className="px-4 py-3 font-medium">{t('vulns.colCvss')}</th>
               </tr>
@@ -314,7 +635,7 @@ export function VulnerabilitiesPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-surface-400"
                   >
                     {t('vulns.loading')}
@@ -323,7 +644,7 @@ export function VulnerabilitiesPage() {
               ) : filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-10 text-center text-surface-400"
                   >
                     {t('vulns.empty')}
@@ -335,6 +656,14 @@ export function VulnerabilitiesPage() {
                     key={v.id}
                     className="border-t border-surface-800 transition-colors hover:bg-surface-800/40"
                   >
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(v.id)}
+                        onChange={() => toggleOne(v.id)}
+                        aria-label={v.title}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <SeverityBadge severity={v.severity} />
                     </td>

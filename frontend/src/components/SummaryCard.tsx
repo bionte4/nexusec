@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 interface SummaryCardProps {
   label: string
@@ -6,6 +7,7 @@ interface SummaryCardProps {
   hint?: string
   icon: LucideIcon
   tone?: 'default' | 'danger' | 'warn' | 'ok' | 'accent'
+  to?: string
 }
 
 const toneMap = {
@@ -22,9 +24,10 @@ export function SummaryCard({
   hint,
   icon: Icon,
   tone = 'default',
+  to,
 }: SummaryCardProps) {
-  return (
-    <div className="panel rounded-xl p-5 transition-transform duration-300 hover:-translate-y-0.5">
+  const body = (
+    <>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-surface-400">
           {label}
@@ -41,6 +44,23 @@ export function SummaryCard({
       {hint ? (
         <p className="mt-2 text-xs text-surface-400">{hint}</p>
       ) : null}
+    </>
+  )
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className="panel block rounded-xl p-5 transition-transform duration-300 hover:-translate-y-0.5 hover:border-accent/40"
+      >
+        {body}
+      </Link>
+    )
+  }
+
+  return (
+    <div className="panel rounded-xl p-5 transition-transform duration-300 hover:-translate-y-0.5">
+      {body}
     </div>
   )
 }
