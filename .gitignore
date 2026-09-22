@@ -46,3 +46,6 @@ out/
 # Docker volumes
 pgdata/
 redisdata/
+
+# Local drafting (journal paper prompts)
+Masterpromppaper.md
