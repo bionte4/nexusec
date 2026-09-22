@@ -67,16 +67,55 @@ export function ScansPage() {
     engine: 'nmap' as ScannerEngine,
     asset_id: '',
     start_immediately: true,
+    config: {} as Record<string, unknown>,
   })
 
-  const load = useCallback(async () => {
+  type PresetId = 'discovery_nmap' | 'va_nuclei' | 'va_nexusec'
+
+  function applyPreset(preset: PresetId) {
+    if (preset === 'discovery_nmap') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetDiscoveryName'),
+        scan_type: 'discovery',
+        engine: 'nmap',
+        config: {},
+      }))
+      return
+    }
+    if (preset === 'va_nuclei') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetNucleiName'),
+        scan_type: 'va',
+        engine: 'nuclei',
+        config: {
+          severity: ['critical', 'high', 'medium'],
+          tags: ['cve', 'misconfig', 'vuln'],
+          exclude_tags: ['dos'],
+        },
+      }))
+      return
+    }
+    setForm((f) => ({
+      ...f,
+      name: f.name || t('scans.presetNexusecName'),
+      scan_type: 'va',
+      engine: 'nexusec',
+      config: {},
+    }))
+  }
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (usingMock || token === 'demo') {
       setLoading(false)
       setError(t('scans.liveRequired'))
       return
     }
-    setLoading(true)
-    setError(null)
+    if (!opts?.silent) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       if (user?.role === 'super_admin') {
         const orgList = await api.listOrganizations({ page_size: 50 })
@@ -102,17 +141,34 @@ export function ScansPage() {
           : { ...f, asset_id: assetRes.items[0].id },
       )
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('scans.loadFailed'))
-      setItems([])
-      setTotal(0)
+      if (!opts?.silent) {
+        setError(err instanceof ApiError ? err.message : t('scans.loadFailed'))
+        setItems([])
+        setTotal(0)
+      }
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }, [token, user?.role, usingMock, t])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  const hasActiveScans = items.some(
+    (s) =>
+      s.status === 'queued' ||
+      s.status === 'running' ||
+      s.status === 'pending',
+  )
+
+  useEffect(() => {
+    if (!hasActiveScans || usingMock || token === 'demo') return
+    const id = window.setInterval(() => {
+      void load({ silent: true })
+    }, 5000)
+    return () => window.clearInterval(id)
+  }, [hasActiveScans, load, token, usingMock])
 
   function onOrgChange(orgId: string) {
     setSelectedOrg(orgId)
@@ -136,10 +192,11 @@ export function ScansPage() {
         scan_type: form.scan_type,
         engine: form.engine,
         asset_ids: [form.asset_id],
+        config: form.config,
         start_immediately: form.start_immediately,
       })
       setNotice(res.message)
-      setForm((f) => ({ ...f, name: '' }))
+      setForm((f) => ({ ...f, name: '', config: {} }))
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('scans.createFailed'))
@@ -225,6 +282,34 @@ export function ScansPage() {
               <Plus className="h-4 w-4 text-accent" />
               {t('scans.newScan')}
             </h2>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => applyPreset('discovery_nmap')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetDiscovery')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('va_nuclei')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetNuclei')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('va_nexusec')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetNexusec')}
+              </button>
+            </div>
+            {hasActiveScans ? (
+              <p className="font-mono text-[10px] text-accent">
+                {t('scans.autoRefreshing')}
+              </p>
+            ) : null}
             <input
               required
               value={form.name}

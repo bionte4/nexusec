@@ -107,6 +107,17 @@ export interface AIFPAnalysisResponse {
   vulnerability: Vulnerability
 }
 
+export interface AIRemediationResponse {
+  vulnerability_id: string
+  provider: string
+  model: string
+  explanation: string
+  remediation_steps: string
+  patch_example: string
+  remediation: string
+  vulnerability: Vulnerability
+}
+
 export interface SocChatResponse {
   answer: string
   provider: string

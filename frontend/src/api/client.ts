@@ -1,5 +1,6 @@
 import type {
   AIFPAnalysisResponse,
+  AIRemediationResponse,
   Asset,
   AssetCreatePayload,
   AssetListResponse,
@@ -139,6 +140,14 @@ export const api = {
     const q = persist ? '' : '?persist=false'
     return request<AIFPAnalysisResponse>(
       `/api/v1/vulnerabilities/${id}/analyze-fp${q}`,
+      { method: 'POST' },
+    )
+  },
+
+  generateAiPatch(id: string, persist = true) {
+    const q = persist ? '' : '?persist=false'
+    return request<AIRemediationResponse>(
+      `/api/v1/vulnerabilities/${id}/generate-ai-patch${q}`,
       { method: 'POST' },
     )
   },
