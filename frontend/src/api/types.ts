@@ -190,3 +190,104 @@ export interface VulnListParams {
   asset_id?: string
   search?: string
 }
+
+export type AssetType = 'ip' | 'domain' | 'cloud_resource'
+export type AssetCriticality = 'critical' | 'high' | 'medium' | 'low'
+export type ScanStatus =
+  | 'pending'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+export type ScanType = 'va' | 'pt' | 'discovery' | 'compliance' | 'custom'
+export type ScannerEngine = 'nexusec' | 'nmap' | 'nuclei' | 'openvas' | 'other'
+
+export interface Asset {
+  id: string
+  organization_id: string
+  name: string
+  asset_type: AssetType
+  criticality: AssetCriticality
+  ip_address: string | null
+  domain: string | null
+  cloud_resource_id: string | null
+  cloud_provider: string | null
+  is_cde_scope: boolean
+  hostname: string | null
+  url: string | null
+  environment: string | null
+  owner: string | null
+  description: string | null
+  tags: Record<string, unknown>
+  metadata: Record<string, unknown>
+  created_by_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AssetListResponse {
+  items: Asset[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface AssetCreatePayload {
+  name: string
+  asset_type: AssetType
+  criticality?: AssetCriticality
+  ip_address?: string | null
+  domain?: string | null
+  cloud_resource_id?: string | null
+  cloud_provider?: string | null
+  is_cde_scope?: boolean
+  hostname?: string | null
+  url?: string | null
+  environment?: string | null
+  owner?: string | null
+  description?: string | null
+}
+
+export interface Scan {
+  id: string
+  organization_id: string | null
+  name: string
+  scan_type: ScanType
+  engine: ScannerEngine
+  status: ScanStatus
+  progress: number
+  config: Record<string, unknown>
+  celery_task_id: string | null
+  error_message: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_by_id: string | null
+  created_at: string
+  updated_at: string
+  asset_ids: string[]
+}
+
+export interface ScanListResponse {
+  items: Scan[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface ScanEnqueueResponse {
+  scan: Scan
+  celery_task_id: string | null
+  message: string
+}
+
+export interface ScanCreatePayload {
+  name: string
+  scan_type?: ScanType
+  engine?: ScannerEngine
+  asset_ids: string[]
+  config?: Record<string, unknown>
+  start_immediately?: boolean
+}

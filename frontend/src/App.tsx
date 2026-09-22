@@ -3,8 +3,10 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { AppShell } from './components/AppShell'
 import { AdminPage } from './pages/AdminPage'
+import { AssetsPage } from './pages/AssetsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
+import { ScansPage } from './pages/ScansPage'
 import { SocChatPage } from './pages/SocChatPage'
 import { VulnerabilitiesPage } from './pages/VulnerabilitiesPage'
 import { VulnerabilityDetailPage } from './pages/VulnerabilityDetailPage'
@@ -28,6 +30,8 @@ export default function App() {
           }
         >
           <Route index element={<DashboardPage />} />
+          <Route path="assets" element={<AssetsPage />} />
+          <Route path="scans" element={<ScansPage />} />
           <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
           <Route
             path="vulnerabilities/:id"

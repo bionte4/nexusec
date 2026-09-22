@@ -7,8 +7,12 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { api, getToken, setToken } from '../api/client'
+import { api, getToken, setOrganizationId, setToken } from '../api/client'
 import type { AuthUser } from '../api/types'
+
+function syncOrganizationId(user: AuthUser | null): void {
+  setOrganizationId(user?.organization_id ?? null)
+}
 
 interface AuthState {
   token: string | null
@@ -38,14 +42,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await api.me()
       setUser(me)
+      syncOrganizationId(me)
+      if (me.role === 'super_admin' && !me.organization_id) {
+        try {
+          const orgs = await api.listOrganizations({ page_size: 1 })
+          if (orgs.items[0]) setOrganizationId(orgs.items[0].id)
+        } catch {
+          /* keep null — create will prompt for scope */
+        }
+      }
     } catch {
       setUser(null)
+      syncOrganizationId(null)
     }
   }, [])
 
   useEffect(() => {
     if (token && token !== 'demo') void refreshUser()
-    else setUser(null)
+    else {
+      setUser(null)
+      syncOrganizationId(null)
+    }
   }, [token, refreshUser])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -53,12 +70,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(res.access_token)
     setTokenState(res.access_token)
     setUsingMock(false)
-    if (res.user) setUser(res.user)
-    else {
+    let next: AuthUser | null = res.user ?? null
+    if (!next) {
       try {
-        setUser(await api.me())
+        next = await api.me()
       } catch {
-        setUser(null)
+        next = null
+      }
+    }
+    setUser(next)
+    syncOrganizationId(next)
+    if (next?.role === 'super_admin' && !next.organization_id) {
+      try {
+        const orgs = await api.listOrganizations({ page_size: 1 })
+        if (orgs.items[0]) setOrganizationId(orgs.items[0].id)
+      } catch {
+        /* ignore */
       }
     }
   }, [])
@@ -66,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const enterDemo = useCallback(() => {
     setToken(null)
     setTokenState('demo')
+    syncOrganizationId(null)
     setUser({
       id: 'demo',
       email: 'demo@nexusec.local',
@@ -83,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null)
     setTokenState(null)
     setUser(null)
+    syncOrganizationId(null)
     setUsingMock(false)
   }, [])
 

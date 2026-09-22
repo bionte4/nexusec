@@ -1,11 +1,17 @@
 import type {
   AIFPAnalysisResponse,
+  Asset,
+  AssetCreatePayload,
+  AssetListResponse,
   AuthUser,
   DashboardOverview,
   LoginResponse,
   Organization,
   OrganizationListResponse,
   OrganizationMetrics,
+  ScanCreatePayload,
+  ScanEnqueueResponse,
+  ScanListResponse,
   SocChatResponse,
   UserListResponse,
   VulnListParams,
@@ -14,6 +20,7 @@ import type {
 } from './types'
 
 const TOKEN_KEY = 'nexusec_access_token'
+const ORG_KEY = 'nexusec_organization_id'
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
@@ -22,6 +29,15 @@ export function getToken(): string | null {
 export function setToken(token: string | null): void {
   if (token) localStorage.setItem(TOKEN_KEY, token)
   else localStorage.removeItem(TOKEN_KEY)
+}
+
+export function getOrganizationId(): string | null {
+  return localStorage.getItem(ORG_KEY)
+}
+
+export function setOrganizationId(orgId: string | null): void {
+  if (orgId) localStorage.setItem(ORG_KEY, orgId)
+  else localStorage.removeItem(ORG_KEY)
 }
 
 export class ApiError extends Error {
@@ -44,6 +60,10 @@ async function request<T>(
   }
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  const orgId = getOrganizationId()
+  if (orgId && !headers.has('X-Organization-Id')) {
+    headers.set('X-Organization-Id', orgId)
+  }
 
   const res = await fetch(path, { ...options, headers })
   if (!res.ok && !allowStatuses.includes(res.status)) {
@@ -195,5 +215,59 @@ export const api = {
 
   healthWorkers() {
     return request<Record<string, unknown>>('/api/v1/health/workers', {}, [503])
+  },
+
+  listAssets(params: {
+    page?: number
+    page_size?: number
+    search?: string
+    asset_type?: string
+    criticality?: string
+    is_cde_scope?: boolean
+  } = {}) {
+    const q = new URLSearchParams()
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    if (params.search) q.set('search', params.search)
+    if (params.asset_type) q.set('asset_type', params.asset_type)
+    if (params.criticality) q.set('criticality', params.criticality)
+    if (params.is_cde_scope != null) q.set('is_cde_scope', String(params.is_cde_scope))
+    const qs = q.toString()
+    return request<AssetListResponse>(`/api/v1/assets${qs ? `?${qs}` : ''}`)
+  },
+
+  createAsset(payload: AssetCreatePayload) {
+    return request<Asset>('/api/v1/assets', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  listScans(params: {
+    page?: number
+    page_size?: number
+    status?: string
+    engine?: string
+  } = {}) {
+    const q = new URLSearchParams()
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    if (params.status) q.set('status', params.status)
+    if (params.engine) q.set('engine', params.engine)
+    const qs = q.toString()
+    return request<ScanListResponse>(`/api/v1/scans${qs ? `?${qs}` : ''}`)
+  },
+
+  createScan(payload: ScanCreatePayload) {
+    return request<ScanEnqueueResponse>('/api/v1/scans', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  startScan(id: string) {
+    return request<ScanEnqueueResponse>(`/api/v1/scans/${id}/start`, {
+      method: 'POST',
+    })
   },
 }

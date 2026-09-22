@@ -4,6 +4,8 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquareText,
+  Radar,
+  Server,
   Settings2,
   ShieldAlert,
   ShieldCheck,
@@ -12,6 +14,8 @@ import { useAuth } from '../auth/AuthContext'
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/assets', label: 'Assets', icon: Server },
+  { to: '/scans', label: 'Scans', icon: Radar },
   { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
   { to: '/soc-chat', label: 'SOC Chat', icon: MessageSquareText },
   { to: '/admin', label: 'Administration', icon: Settings2, adminOnly: true },
