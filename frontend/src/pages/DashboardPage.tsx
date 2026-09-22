@@ -11,19 +11,21 @@ import { useAuth } from '../auth/AuthContext'
 import { SummaryCard } from '../components/SummaryCard'
 import { TrendChart } from '../components/TrendChart'
 import { MOCK_DASHBOARD } from '../data/mock'
+import { useLocale } from '../i18n/locale'
 
-function complianceScore(data: DashboardOverview): string {
+function complianceScoreKey(data: DashboardOverview): 'compliant' | 'atRisk' | 'partial' | 'unknown' {
   const openCritHigh =
     data.active_by_severity.critical + data.active_by_severity.high
   const cdeAssets = data.asset_risk_posture.filter((a) => a.is_cde_scope).length
-  if (openCritHigh === 0 && data.total_assets > 0) return 'Compliant'
-  if (cdeAssets > 0 && openCritHigh > 5) return 'At risk'
-  if (openCritHigh > 0) return 'Partial'
-  return 'Unknown'
+  if (openCritHigh === 0 && data.total_assets > 0) return 'compliant'
+  if (cdeAssets > 0 && openCritHigh > 5) return 'atRisk'
+  if (openCritHigh > 0) return 'partial'
+  return 'unknown'
 }
 
 export function DashboardPage() {
   const { usingMock, setUsingMock, token } = useAuth()
+  const { t } = useLocale()
   const [data, setData] = useState<DashboardOverview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -54,8 +56,8 @@ export function DashboardPage() {
           setUsingMock(true)
           setError(
             err instanceof ApiError
-              ? `API unavailable (${err.status}) — showing demo data`
-              : 'API unavailable — showing demo data',
+              ? t('dashboard.apiUnavailable', { status: err.status })
+              : t('dashboard.apiUnavailableGeneric'),
           )
         }
       } finally {
@@ -67,35 +69,42 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [usingMock, token, setUsingMock])
+  }, [usingMock, token, setUsingMock, t])
 
   if (loading || !data) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-surface-400">
-        Loading SOC overview…
+        {t('dashboard.loading')}
       </div>
     )
   }
 
   const sev = data.active_by_severity
-  const compliance = complianceScore(data)
+  const complianceKey = complianceScoreKey(data)
+  const complianceMap = {
+    compliant: t('dashboard.compliant'),
+    atRisk: t('dashboard.atRisk'),
+    partial: t('dashboard.partial'),
+    unknown: t('dashboard.unknown'),
+  } as const
+  const compliance = complianceMap[complianceKey]
 
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
-            Operations
+            {t('dashboard.eyebrow')}
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            SOC Dashboard
+            {t('dashboard.title')}
           </h1>
           <p className="mt-1 text-sm text-surface-400">
-            Live posture across assets, critical findings, and compliance scope.
+            {t('dashboard.subtitle')}
           </p>
         </div>
         <div className="font-mono text-[11px] text-surface-400">
-          Generated {new Date(data.generated_at).toLocaleString()}
+          {t('dashboard.generated', { when: new Date(data.generated_at).toLocaleString() })}
         </div>
       </header>
 
@@ -107,48 +116,48 @@ export function DashboardPage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
-          label="Total assets"
+          label={t('dashboard.totalAssets')}
           value={data.total_assets}
-          hint={`${data.assets_with_active_findings} with active findings`}
+          hint={t('dashboard.withActive', { count: data.assets_with_active_findings })}
           icon={Server}
           tone="accent"
         />
         <SummaryCard
-          label="Open critical"
+          label={t('dashboard.openCritical')}
           value={sev.critical}
-          hint="Requires immediate triage"
+          hint={t('dashboard.immediateTriage')}
           icon={ShieldAlert}
           tone="danger"
         />
         <SummaryCard
-          label="Open high"
+          label={t('dashboard.openHigh')}
           value={sev.high}
-          hint={`${sev.total} active findings total`}
+          hint={t('dashboard.activeTotal', { count: sev.total })}
           icon={AlertTriangle}
           tone="warn"
         />
         <SummaryCard
-          label="Compliance"
+          label={t('dashboard.compliance')}
           value={compliance}
-          hint="PCI-DSS / ISO / GDPR posture"
+          hint={t('dashboard.complianceHint')}
           icon={CheckCircle2}
-          tone={compliance === 'Compliant' ? 'ok' : 'warn'}
+          tone={complianceKey === 'compliant' ? 'ok' : 'warn'}
         />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="panel rounded-xl p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-medium">Vulnerability trends</h2>
+            <h2 className="text-sm font-medium">{t('dashboard.trends')}</h2>
             <span className="font-mono text-[11px] text-surface-400">
-              last {data.trend.length} days
+              {t('dashboard.lastDays', { count: data.trend.length })}
             </span>
           </div>
           <TrendChart data={data.trend} />
         </div>
 
         <div className="panel rounded-xl p-5">
-          <h2 className="mb-4 text-sm font-medium">Severity mix</h2>
+          <h2 className="mb-4 text-sm font-medium">{t('dashboard.severityMix')}</h2>
           <ul className="space-y-3">
             {(
               [
@@ -181,7 +190,7 @@ export function DashboardPage() {
             })}
           </ul>
 
-          <h2 className="mb-3 mt-8 text-sm font-medium">Top risk assets</h2>
+          <h2 className="mb-3 mt-8 text-sm font-medium">{t('dashboard.topRisk')}</h2>
           <ul className="space-y-2">
             {data.asset_risk_posture.slice(0, 5).map((a) => (
               <li
@@ -201,7 +210,7 @@ export function DashboardPage() {
               </li>
             ))}
             {data.asset_risk_posture.length === 0 ? (
-              <li className="text-xs text-surface-400">No asset risk data</li>
+              <li className="text-xs text-surface-400">{t('dashboard.noRiskData')}</li>
             ) : null}
           </ul>
         </div>

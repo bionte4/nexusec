@@ -20,6 +20,7 @@ from workers.tool_wrappers.base import (
     ToolTimeoutError,
 )
 from workers.tool_wrappers.nmap import DEFAULT_NMAP_FLAGS, NmapScanRequest, NmapWrapper
+from workers.tool_wrappers.nuclei import NucleiScanRequest, NucleiWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,31 @@ def _targets_from_assets(assets: list[Asset]) -> list[str]:
         elif asset.ip_address:
             targets.append(str(asset.ip_address))
     # de-dupe preserve order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for t in targets:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+    return unique
+
+
+def _nuclei_targets_from_assets(assets: list[Asset]) -> list[str]:
+    """Prefer explicit URL; otherwise derive http(s) endpoints from domain/IP."""
+    targets: list[str] = []
+    for asset in assets:
+        url = (getattr(asset, "url", None) or "").strip()
+        if url:
+            targets.append(url)
+            continue
+        if asset.domain:
+            targets.append(f"https://{asset.domain}")
+            continue
+        if asset.hostname:
+            targets.append(f"https://{asset.hostname}")
+            continue
+        if asset.ip_address:
+            targets.append(f"http://{asset.ip_address}")
     seen: set[str] = set()
     unique: list[str] = []
     for t in targets:
@@ -393,6 +419,168 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
         }
 
 
+@celery_app.task(name="scans.run_nuclei", bind=True, max_retries=0)
+def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
+    """Execute Nuclei JSONL scan and ingest normalized findings."""
+    try:
+        scan_uuid = UUID(scan_id)
+    except ValueError:
+        logger.error("Invalid scan_id: %s", scan_id)
+        return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
+
+    with session_scope() as session:
+        scan = (
+            session.query(Scan)
+            .options(selectinload(Scan.assets))
+            .filter(Scan.id == scan_uuid)
+            .one_or_none()
+        )
+        if scan is None:
+            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+
+        scan.celery_task_id = self.request.id
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.RUNNING,
+            progress=5.0,
+            mark_started=True,
+            error_message=None,
+        )
+
+        targets = _nuclei_targets_from_assets(list(scan.assets))
+        if not targets:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message="No valid URL/domain/IP targets on linked assets",
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": "no targets"}
+
+        cfg = scan.config or {}
+        severities = cfg.get("severity") or cfg.get("severities") or [
+            "critical",
+            "high",
+            "medium",
+        ]
+        tags = cfg.get("tags") or []
+        exclude_tags = cfg.get("exclude_tags") or cfg.get("etags") or ["dos"]
+        rate_limit = int(cfg.get("rate_limit") or 50)
+        timeout = int(cfg.get("timeout_seconds") or 900)
+        template_dir = str(cfg.get("template_dir") or "/opt/nuclei-templates")
+
+        try:
+            wrapper = NucleiWrapper()
+            result = wrapper.run(
+                NucleiScanRequest(
+                    targets=targets,
+                    severities=list(severities),
+                    tags=list(tags),
+                    exclude_tags=list(exclude_tags),
+                    rate_limit=rate_limit,
+                    timeout_seconds=timeout,
+                    template_dir=template_dir,
+                )
+            )
+        except ToolNotFoundError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+        except ToolTimeoutError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+        except ToolExecutionError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+
+        stdout = result.stdout
+        truncated = False
+        if len(stdout) > _MAX_RESULT_CHARS:
+            stdout = stdout[:_MAX_RESULT_CHARS]
+            truncated = True
+
+        payload = {
+            "engine": ScannerEngine.NUCLEI.value,
+            "targets": targets,
+            "returncode": result.returncode,
+            "command": list(result.command),
+            "stdout_jsonl": stdout,
+            "stderr": (result.stderr or "")[:10_000],
+            "truncated": truncated,
+            "finished_at": _utcnow().isoformat(),
+        }
+
+        # Nuclei returns 0 even with findings; non-zero indicates tool failure.
+        if result.returncode != 0:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=f"nuclei exited with code {result.returncode}",
+                result_payload=payload,
+                mark_completed=True,
+            )
+            return {
+                "scan_id": scan_id,
+                "status": "failed",
+                "returncode": result.returncode,
+            }
+
+        ingest_stats = _normalize_and_ingest(
+            session,
+            scan=scan,
+            engine=ScannerEngine.NUCLEI,
+            raw_output=stdout,
+        )
+        payload["ingest"] = {
+            "inserted": ingest_stats.inserted,
+            "updated": ingest_stats.updated,
+            "skipped": ingest_stats.skipped,
+            "unmatched_targets": ingest_stats.unmatched_targets[:20],
+        }
+
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.COMPLETED,
+            progress=100.0,
+            error_message=None,
+            result_payload=payload,
+            mark_completed=True,
+        )
+        return {
+            "scan_id": scan_id,
+            "status": "completed",
+            "targets": targets,
+            "returncode": 0,
+            "ingest": payload["ingest"],
+        }
+
+
 @celery_app.task(name="scans.run_scan", bind=True)
 def run_scan(self, scan_id: str) -> dict[str, Any]:
     """Dispatcher — routes to engine-specific Celery tasks."""
@@ -417,6 +605,15 @@ def run_scan(self, scan_id: str) -> dict[str, Any]:
 
     if engine == ScannerEngine.NEXUSEC:
         async_result = run_nexusec_scan.delay(scan_id)
+        return {
+            "scan_id": scan_id,
+            "status": "delegated",
+            "engine": engine.value,
+            "task_id": async_result.id,
+        }
+
+    if engine == ScannerEngine.NUCLEI:
+        async_result = run_nuclei_scan.delay(scan_id)
         return {
             "scan_id": scan_id,
             "status": "delegated",

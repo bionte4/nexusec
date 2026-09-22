@@ -175,6 +175,8 @@ services:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       APP_ENV: ${APP_ENV:-production}
       DEBUG: "false"
+      HOME: /tmp
+      DISABLE_UPDATE_CHECK: "true"
     depends_on:
       postgres:
         condition: service_healthy

@@ -16,8 +16,15 @@ import type {
   ScanType,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { useLocale } from '../i18n/locale'
 
-const ENGINES: ScannerEngine[] = ['nmap', 'nuclei', 'nexusec', 'openvas', 'other']
+const ENGINES: { id: ScannerEngine; ready: boolean }[] = [
+  { id: 'nmap', ready: true },
+  { id: 'nuclei', ready: true },
+  { id: 'nexusec', ready: true },
+  { id: 'openvas', ready: false },
+  { id: 'other', ready: false },
+]
 const SCAN_TYPES: ScanType[] = ['discovery', 'va', 'pt', 'compliance', 'custom']
 
 function statusClass(s: ScanStatus): string {
@@ -38,6 +45,7 @@ function statusClass(s: ScanStatus): string {
 
 export function ScansPage() {
   const { usingMock, token, user } = useAuth()
+  const { t } = useLocale()
   const canWrite =
     user?.role === 'super_admin' ||
     user?.role === 'admin' ||
@@ -64,7 +72,7 @@ export function ScansPage() {
   const load = useCallback(async () => {
     if (usingMock || token === 'demo') {
       setLoading(false)
-      setError('Scans require a live API session (not demo mode).')
+      setError(t('scans.liveRequired'))
       return
     }
     setLoading(true)
@@ -94,13 +102,13 @@ export function ScansPage() {
           : { ...f, asset_id: assetRes.items[0].id },
       )
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load scans')
+      setError(err instanceof ApiError ? err.message : t('scans.loadFailed'))
       setItems([])
       setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [token, user?.role, usingMock])
+  }, [token, user?.role, usingMock, t])
 
   useEffect(() => {
     void load()
@@ -134,7 +142,7 @@ export function ScansPage() {
       setForm((f) => ({ ...f, name: '' }))
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create scan')
+      setError(err instanceof ApiError ? err.message : t('scans.createFailed'))
     } finally {
       setBusy(false)
     }
@@ -149,7 +157,7 @@ export function ScansPage() {
       setNotice(res.message)
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to start scan')
+      setError(err instanceof ApiError ? err.message : t('scans.startFailed'))
     } finally {
       setBusy(false)
     }
@@ -163,15 +171,15 @@ export function ScansPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Scans</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('scans.title')}</h1>
           <p className="mt-1 text-sm text-surface-400">
-            VA/PT jobs · {total} scan{total === 1 ? '' : 's'}
+            {t('scans.subtitle', { count: total })}
           </p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           {user?.role === 'super_admin' && orgs.length > 0 ? (
             <label className="flex flex-col gap-1 text-xs text-surface-400">
-              Organization scope
+              {t('common.orgScope')}
               <select
                 value={selectedOrg}
                 onChange={(e) => onOrgChange(e.target.value)}
@@ -191,7 +199,7 @@ export function ScansPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-surface-600 px-3 py-2 text-sm text-surface-200 hover:border-accent hover:text-accent"
           >
             <RefreshCw className="h-4 w-4" />
-            Refresh
+            {t('common.refresh')}
           </button>
         </div>
       </header>
@@ -215,13 +223,13 @@ export function ScansPage() {
           >
             <h2 className="flex items-center gap-2 text-sm font-medium">
               <Plus className="h-4 w-4 text-accent" />
-              New scan
+              {t('scans.newScan')}
             </h2>
             <input
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Scan name"
+              placeholder={t('scans.scanName')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             />
             <select
@@ -230,7 +238,7 @@ export function ScansPage() {
               required
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
-              <option value="">Select asset…</option>
+              <option value="">{t('scans.selectAsset')}</option>
               {assets.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name} ({a.asset_type})
@@ -239,9 +247,9 @@ export function ScansPage() {
             </select>
             {assets.length === 0 ? (
               <p className="text-[11px] text-surface-400">
-                No assets yet.{' '}
+                {t('scans.noAssets')}{' '}
                 <Link to="/assets" className="text-accent hover:underline">
-                  Register one first
+                  {t('scans.registerFirst')}
                 </Link>
                 .
               </p>
@@ -255,8 +263,8 @@ export function ScansPage() {
                 className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
               >
                 {ENGINES.map((eng) => (
-                  <option key={eng} value={eng}>
-                    {eng}
+                  <option key={eng.id} value={eng.id} disabled={!eng.ready}>
+                    {eng.ready ? eng.id : `${eng.id} (soon)`}
                   </option>
                 ))}
               </select>
@@ -282,29 +290,29 @@ export function ScansPage() {
                   setForm({ ...form, start_immediately: e.target.checked })
                 }
               />
-              Start immediately (enqueue worker)
+              {t('scans.startImmediately')}
             </label>
             <button
               type="submit"
               disabled={busy || !form.name.trim() || !form.asset_id}
               className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
             >
-              {busy ? 'Queuing…' : 'Create scan'}
+              {busy ? t('scans.queuing') : t('scans.create')}
             </button>
           </form>
         ) : (
           <div className="panel rounded-xl p-5 text-sm text-surface-400 lg:col-span-1">
             <Radar className="mb-2 h-5 w-5 text-accent" />
-            View-only for SOC Analyst. Ask Admin/Pentester to run scans.
+            {t('scans.viewOnlyHint')}
           </div>
         )}
 
         <div className="space-y-2 lg:col-span-2">
           {loading ? (
-            <p className="py-12 text-center text-sm text-surface-400">Loading scans…</p>
+            <p className="py-12 text-center text-sm text-surface-400">{t('scans.loading')}</p>
           ) : items.length === 0 ? (
             <p className="panel rounded-xl py-12 text-center text-sm text-surface-400">
-              No scans yet. Create a job against a registered asset.
+              {t('scans.empty')}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -343,7 +351,7 @@ export function ScansPage() {
                           className="inline-flex items-center gap-1 rounded-md border border-surface-600 px-2 py-1 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
                         >
                           <Play className="h-3 w-3" />
-                          Start
+                          {t('scans.start')}
                         </button>
                       ) : null}
                     </div>

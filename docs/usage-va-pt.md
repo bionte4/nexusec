@@ -133,8 +133,9 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 | Engine | Tipe scan tipikal | Keterangan |
 |--------|-------------------|------------|
 | `nmap` | `discovery` / `va` | Port/service fingerprint; output XML dinormalisasi otomatis |
-| `nuclei` | `va` | Template-driven vulnerability checks |
+| `nuclei` | `va` / `pt` | Template-driven vulnerability checks (JSONL → ingest) |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
+| `openvas` / `other` | — | Belum diimplementasi (placeholder API/UI) |
 
 Jenis `scan_type`: `discovery` · `va` · `pt` · `compliance` · `custom`.
 

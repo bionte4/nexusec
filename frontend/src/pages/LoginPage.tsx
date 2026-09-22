@@ -3,9 +3,12 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { ShieldCheck } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
+import { LanguageToggle } from '../components/LanguageToggle'
+import { useLocale } from '../i18n/locale'
 
 export function LoginPage() {
   const { token, login, enterDemo } = useAuth()
+  const { t } = useLocale()
   const navigate = useNavigate()
   const [email, setEmail] = useState('admin@example.com')
   const [password, setPassword] = useState('')
@@ -23,7 +26,7 @@ export function LoginPage() {
       navigate('/')
     } catch (err) {
       if (err instanceof ApiError) setError(err.message)
-      else setError('Unable to reach API. Use demo mode or start the backend.')
+      else setError(t('login.apiUnreachable'))
     } finally {
       setBusy(false)
     }
@@ -32,21 +35,26 @@ export function LoginPage() {
   return (
     <div className="grid-noise flex min-h-screen items-center justify-center px-4">
       <div className="panel w-full max-w-md rounded-2xl p-8">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent/15 text-accent">
-            <ShieldCheck className="h-6 w-6" />
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent/15 text-accent">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight">NexuSec</h1>
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-surface-400">
+                {t('login.subtitle')}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">NexuSec</h1>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-surface-400">
-              Sign in to SOC Console
-            </p>
+          <div className="w-24">
+            <LanguageToggle compact />
           </div>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block space-y-1.5">
-            <span className="text-xs text-surface-400">Email</span>
+            <span className="text-xs text-surface-400">{t('login.email')}</span>
             <input
               type="email"
               required
@@ -56,7 +64,7 @@ export function LoginPage() {
             />
           </label>
           <label className="block space-y-1.5">
-            <span className="text-xs text-surface-400">Password</span>
+            <span className="text-xs text-surface-400">{t('login.password')}</span>
             <input
               type="password"
               required
@@ -75,7 +83,7 @@ export function LoginPage() {
             disabled={busy}
             className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-60"
           >
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? t('login.signingIn') : t('login.signIn')}
           </button>
         </form>
 
@@ -88,7 +96,7 @@ export function LoginPage() {
           }}
           className="w-full rounded-lg border border-surface-600 px-4 py-2.5 text-sm text-surface-300 transition hover:border-accent hover:text-accent"
         >
-          Continue with demo data
+          {t('login.demo')}
         </button>
       </div>
     </div>

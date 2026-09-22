@@ -14,12 +14,14 @@ import type {
   Organization,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { useLocale } from '../i18n/locale'
 
 const ASSET_TYPES: AssetType[] = ['ip', 'domain', 'cloud_resource']
 const CRITICALITIES: AssetCriticality[] = ['critical', 'high', 'medium', 'low']
 
 export function AssetsPage() {
   const { usingMock, token, user, isAdmin } = useAuth()
+  const { t } = useLocale()
   const canWrite =
     user?.role === 'super_admin' ||
     user?.role === 'admin' ||
@@ -52,7 +54,7 @@ export function AssetsPage() {
   const load = useCallback(async () => {
     if (usingMock || token === 'demo') {
       setLoading(false)
-      setError('Assets require a live API session (not demo mode).')
+      setError(t('assets.liveRequired'))
       return
     }
     setLoading(true)
@@ -73,13 +75,13 @@ export function AssetsPage() {
       setItems(res.items)
       setTotal(res.total)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load assets')
+      setError(err instanceof ApiError ? err.message : t('assets.loadFailed'))
       setItems([])
       setTotal(0)
     } finally {
       setLoading(false)
     }
-  }, [search, token, user?.role, usingMock])
+  }, [search, token, user?.role, usingMock, t])
 
   useEffect(() => {
     void load()
@@ -115,7 +117,7 @@ export function AssetsPage() {
         is_cde_scope: form.is_cde_scope,
       }
       const created = await api.createAsset(payload)
-      setNotice(`Asset “${created.name}” created.`)
+      setNotice(t('assets.created', { name: created.name }))
       setForm({
         name: '',
         asset_type: 'domain',
@@ -131,7 +133,7 @@ export function AssetsPage() {
       })
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create asset')
+      setError(err instanceof ApiError ? err.message : t('assets.createFailed'))
     } finally {
       setBusy(false)
     }
@@ -147,14 +149,14 @@ export function AssetsPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Assets</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('assets.title')}</h1>
           <p className="mt-1 text-sm text-surface-400">
-            Authorized VA/PT scope · {total} asset{total === 1 ? '' : 's'}
+            {t('assets.subtitle', { count: total })}
           </p>
         </div>
         {user?.role === 'super_admin' && orgs.length > 0 ? (
           <label className="flex flex-col gap-1 text-xs text-surface-400">
-            Organization scope
+            {t('common.orgScope')}
             <select
               value={selectedOrg}
               onChange={(e) => onOrgChange(e.target.value)}
@@ -189,13 +191,13 @@ export function AssetsPage() {
           >
             <h2 className="flex items-center gap-2 text-sm font-medium">
               <Plus className="h-4 w-4 text-accent" />
-              Register asset
+              {t('assets.register')}
             </h2>
             <input
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Display name"
+              placeholder={t('assets.displayName')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             />
             <div className="grid grid-cols-2 gap-2">
@@ -234,7 +236,7 @@ export function AssetsPage() {
                 required
                 value={form.ip_address}
                 onChange={(e) => setForm({ ...form, ip_address: e.target.value })}
-                placeholder="IP address"
+                placeholder={t('assets.ipAddress')}
                 className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
               />
             ) : null}
@@ -244,13 +246,13 @@ export function AssetsPage() {
                   required
                   value={form.domain}
                   onChange={(e) => setForm({ ...form, domain: e.target.value })}
-                  placeholder="domain.example.com"
+                  placeholder={t('assets.domainPlaceholder')}
                   className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
                 />
                 <input
                   value={form.url}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
-                  placeholder="https://… (optional)"
+                  placeholder={t('assets.urlOptional')}
                   className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
                 />
               </>
@@ -262,20 +264,20 @@ export function AssetsPage() {
                 onChange={(e) =>
                   setForm({ ...form, cloud_resource_id: e.target.value })
                 }
-                placeholder="Cloud resource ID"
+                placeholder={t('assets.cloudId')}
                 className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
               />
             ) : null}
             <input
               value={form.environment}
               onChange={(e) => setForm({ ...form, environment: e.target.value })}
-              placeholder="Environment"
+              placeholder={t('assets.environment')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             />
             <input
               value={form.owner}
               onChange={(e) => setForm({ ...form, owner: e.target.value })}
-              placeholder="Owner"
+              placeholder={t('assets.owner')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             />
             <label className="flex items-center gap-2 text-xs text-surface-300">
@@ -286,14 +288,14 @@ export function AssetsPage() {
                   setForm({ ...form, is_cde_scope: e.target.checked })
                 }
               />
-              PCI-DSS CDE scope
+              {t('assets.cdeScope')}
             </label>
             <button
               type="submit"
               disabled={busy || !form.name.trim()}
               className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
             >
-              {busy ? 'Saving…' : 'Create asset'}
+              {busy ? t('assets.saving') : t('assets.create')}
             </button>
             {!isAdmin && user?.role === 'soc_analyst' ? (
               <p className="text-[11px] text-surface-400">
@@ -304,7 +306,7 @@ export function AssetsPage() {
         ) : (
           <div className="panel rounded-xl p-5 text-sm text-surface-400 lg:col-span-1">
             <Server className="mb-2 h-5 w-5 text-accent" />
-            View-only for SOC Analyst. Ask Admin/Pentester to register scope.
+            {t('assets.viewOnlyHint')}
           </div>
         )}
 
@@ -314,16 +316,16 @@ export function AssetsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, domain, hostname…"
+              placeholder={t('assets.searchPlaceholder')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 py-2 pl-10 pr-3 text-sm outline-none focus:border-accent"
             />
           </div>
 
           {loading ? (
-            <p className="py-12 text-center text-sm text-surface-400">Loading assets…</p>
+            <p className="py-12 text-center text-sm text-surface-400">{t('assets.loading')}</p>
           ) : items.length === 0 ? (
             <p className="panel rounded-xl py-12 text-center text-sm text-surface-400">
-              No assets yet. Register a target to start VA/PT.
+              {t('assets.empty')}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -348,7 +350,7 @@ export function AssetsPage() {
                       to={`/vulnerabilities?asset_id=${a.id}`}
                       className="text-xs text-accent hover:underline"
                     >
-                      Findings
+                      {t('common.findings')}
                     </Link>
                   </div>
                 </li>

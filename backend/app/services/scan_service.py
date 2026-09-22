@@ -52,8 +52,12 @@ class ScanService:
         if len(assets) != len(set(payload.asset_ids)):
             raise ScanValidationError("One or more asset_ids were not found")
 
-        if payload.engine in {ScannerEngine.NMAP, ScannerEngine.NEXUSEC}:
-            self._ensure_nmap_targets(assets)
+        if payload.engine in {
+            ScannerEngine.NMAP,
+            ScannerEngine.NEXUSEC,
+            ScannerEngine.NUCLEI,
+        }:
+            self._ensure_scan_targets(assets, engine=payload.engine)
 
         scan = Scan(
             organization_id=organization_id,
@@ -96,10 +100,15 @@ class ScanService:
             from workers.tasks import run_nexusec_scan
 
             async_result = run_nexusec_scan.delay(str(scan_id))
-        else:
-            from workers.tasks import run_scan
+        elif eng == ScannerEngine.NUCLEI:
+            from workers.tasks import run_nuclei_scan
 
-            async_result = run_scan.delay(str(scan_id))
+            async_result = run_nuclei_scan.delay(str(scan_id))
+        else:
+            raise ScanValidationError(
+                f"Engine '{eng.value}' is not implemented yet "
+                "(supported: nmap, nuclei, nexusec)"
+            )
 
         scan.status = ScanStatus.QUEUED
         scan.celery_task_id = async_result.id
@@ -175,14 +184,19 @@ class ScanService:
         return list((await self.db.execute(stmt)).scalars().all())
 
     @staticmethod
-    def _ensure_nmap_targets(assets: list[Asset]) -> None:
+    def _ensure_scan_targets(assets: list[Asset], *, engine: ScannerEngine) -> None:
         from app.core.enums import AssetType
 
         for asset in assets:
+            if engine == ScannerEngine.NUCLEI:
+                if (asset.url or "").strip():
+                    continue
             if asset.asset_type == AssetType.IP and asset.ip_address:
                 continue
             if asset.asset_type == AssetType.DOMAIN and asset.domain:
                 continue
             if asset.ip_address or asset.domain or asset.hostname:
                 continue
-            raise ScanValidationError(f"Asset {asset.id} has no IP/domain suitable for Nmap")
+            raise ScanValidationError(
+                f"Asset {asset.id} has no IP/domain/URL suitable for {engine.value}"
+            )

@@ -8,6 +8,7 @@ import type {
   Vulnerability,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { useLocale } from '../i18n/locale'
 import { SeverityBadge, StatusBadge } from '../components/Badges'
 import { MOCK_VULNS } from '../data/mock'
 
@@ -37,6 +38,7 @@ function complianceKeys(v: Vulnerability): string[] {
 
 export function VulnerabilitiesPage() {
   const { usingMock, setUsingMock, token } = useAuth()
+  const { t } = useLocale()
   const [items, setItems] = useState<Vulnerability[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -85,8 +87,8 @@ export function VulnerabilitiesPage() {
           setUsingMock(true)
           setError(
             err instanceof ApiError
-              ? `API unavailable (${err.status}) — showing demo data`
-              : 'API unavailable — showing demo data',
+              ? t('vulns.apiUnavailable', { status: err.status })
+              : t('dashboard.apiUnavailableGeneric'),
           )
         }
       } finally {
@@ -98,7 +100,7 @@ export function VulnerabilitiesPage() {
     return () => {
       cancelled = true
     }
-  }, [severity, status, search, usingMock, token, setUsingMock])
+  }, [severity, status, search, usingMock, token, setUsingMock, t])
 
   const filtered = useMemo(() => {
     return items.filter((v) => {
@@ -134,13 +136,13 @@ export function VulnerabilitiesPage() {
     <div className="space-y-6">
       <header>
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
-          Remediation
+          {t('vulns.eyebrow')}
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          Vulnerability management
+          {t('vulns.title')}
         </h1>
         <p className="mt-1 text-sm text-surface-400">
-          Filter by severity, status, asset, and compliance taxonomy.
+          {t('vulns.subtitle')}
         </p>
       </header>
 
@@ -153,19 +155,19 @@ export function VulnerabilitiesPage() {
       <div className="panel rounded-xl p-4">
         <div className="mb-3 flex items-center gap-2 text-xs text-surface-400">
           <Filter className="h-3.5 w-3.5" />
-          Filters
+          {t('vulns.filters')}
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <label className="space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
-              Severity
+              {t('vulns.severity')}
             </span>
             <select
               value={severity}
               onChange={(e) => setSeverity(e.target.value as Severity | '')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
-              <option value="">All</option>
+              <option value="">{t('vulns.all')}</option>
               {SEVERITIES.map((s) => (
                 <option key={s} value={s}>
                   {s}
@@ -175,14 +177,14 @@ export function VulnerabilitiesPage() {
           </label>
           <label className="space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
-              Status
+              {t('vulns.status')}
             </span>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as FindingStatus | '')}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
-              <option value="">All</option>
+              <option value="">{t('vulns.all')}</option>
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replaceAll('_', ' ')}
@@ -192,7 +194,7 @@ export function VulnerabilitiesPage() {
           </label>
           <label className="space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
-              Asset / component
+              {t('vulns.assetComponent')}
             </span>
             <input
               value={assetQuery}
@@ -203,14 +205,14 @@ export function VulnerabilitiesPage() {
           </label>
           <label className="space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
-              Compliance tag
+              {t('vulns.complianceTag')}
             </span>
             <select
               value={compliance}
               onChange={(e) => setCompliance(e.target.value)}
               className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
             >
-              <option value="">All</option>
+              <option value="">{t('vulns.all')}</option>
               {COMPLIANCE_TAGS.map((t) => (
                 <option key={t} value={t}>
                   {t}
@@ -220,14 +222,14 @@ export function VulnerabilitiesPage() {
           </label>
           <label className="space-y-1">
             <span className="font-mono text-[10px] uppercase tracking-wider text-surface-400">
-              Search
+              {t('vulns.search')}
             </span>
             <div className="relative">
               <Search className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-surface-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="title, CVE, CWE…"
+                placeholder={t('vulns.searchPlaceholder')}
                 className="w-full rounded-lg border border-surface-600 bg-surface-900 py-2 pr-3 pl-9 text-sm outline-none focus:border-accent"
               />
             </div>
@@ -238,21 +240,22 @@ export function VulnerabilitiesPage() {
       <div className="panel overflow-hidden rounded-xl">
         <div className="flex items-center justify-between border-b border-surface-700 px-4 py-3">
           <span className="text-sm text-surface-300">
-            Showing {filtered.length}
-            {!usingMock ? ` of ${total}` : ''} findings
+            {usingMock
+              ? t('vulns.showing', { count: filtered.length })
+              : t('vulns.showingOf', { count: filtered.length, total })}
           </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-left text-sm">
             <thead className="bg-surface-900/80 font-mono text-[10px] uppercase tracking-wider text-surface-400">
               <tr>
-                <th className="px-4 py-3 font-medium">Severity</th>
-                <th className="px-4 py-3 font-medium">Title</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Asset</th>
-                <th className="px-4 py-3 font-medium">Compliance</th>
-                <th className="px-4 py-3 font-medium">Owner</th>
-                <th className="px-4 py-3 font-medium">CVSS</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colSeverity')}</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colTitle')}</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colStatus')}</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colAsset')}</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colCompliance')}</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colOwner')}</th>
+                <th className="px-4 py-3 font-medium">{t('vulns.colCvss')}</th>
               </tr>
             </thead>
             <tbody>
@@ -262,7 +265,7 @@ export function VulnerabilitiesPage() {
                     colSpan={7}
                     className="px-4 py-10 text-center text-surface-400"
                   >
-                    Loading…
+                    {t('vulns.loading')}
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
@@ -271,7 +274,7 @@ export function VulnerabilitiesPage() {
                     colSpan={7}
                     className="px-4 py-10 text-center text-surface-400"
                   >
-                    No vulnerabilities match filters
+                    {t('vulns.empty')}
                   </td>
                 </tr>
               ) : (

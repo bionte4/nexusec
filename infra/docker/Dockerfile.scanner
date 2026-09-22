@@ -28,15 +28,44 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     APP_HOME=/app
 
-# nmap for third-party wrapper; connect-scan (-sT) works without NET_RAW as non-root.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    nmap \
-    && rm -rf /var/lib/apt/lists/* \
+# nmap + nuclei for third-party wrappers; connect-scan (-sT) works without NET_RAW as non-root.
+ARG NUCLEI_VERSION=3.3.9
+ARG NUCLEI_TEMPLATES_REF=v10.1.1
+ARG TARGETARCH
+RUN set -eux; \
+    arch="${TARGETARCH:-amd64}"; \
+    case "$arch" in \
+      amd64) nuclei_arch=amd64 ;; \
+      arm64) nuclei_arch=arm64 ;; \
+      *) echo "Unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    apt-get update && apt-get install -y --no-install-recommends \
+      libpq5 \
+      nmap \
+      ca-certificates \
+      curl \
+      unzip \
+      tar \
+    && curl -fsSL \
+      "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${nuclei_arch}.zip" \
+      -o /tmp/nuclei.zip \
+    && unzip -q /tmp/nuclei.zip -d /tmp/nuclei \
+    && install -m 0755 /tmp/nuclei/nuclei /usr/local/bin/nuclei \
+    && rm -rf /tmp/nuclei /tmp/nuclei.zip \
+    && mkdir -p /opt/nuclei-templates \
+    && curl -fsSL \
+      "https://github.com/projectdiscovery/nuclei-templates/archive/refs/tags/${NUCLEI_TEMPLATES_REF}.tar.gz" \
+      -o /tmp/nuclei-templates.tar.gz \
+    && tar -xzf /tmp/nuclei-templates.tar.gz -C /opt/nuclei-templates --strip-components=1 \
+    && rm -f /tmp/nuclei-templates.tar.gz \
+    && test -n "$(ls -A /opt/nuclei-templates)" \
+    && chmod -R a+rX /opt/nuclei-templates \
     && groupadd --gid 10002 scanner \
     && useradd --uid 10002 --gid scanner --shell /usr/sbin/nologin --create-home scanner \
     && mkdir -p /tmp/scanner \
-    && chown -R scanner:scanner /tmp/scanner
+    && chown -R scanner:scanner /tmp/scanner \
+    && apt-get purge -y --auto-remove curl unzip \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 

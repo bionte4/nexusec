@@ -11,18 +11,33 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { LanguageToggle } from './LanguageToggle'
+import { useLocale } from '../i18n/locale'
+import type { MessageKey } from '../i18n/locale'
 
-const nav = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/assets', label: 'Assets', icon: Server },
-  { to: '/scans', label: 'Scans', icon: Radar },
-  { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
-  { to: '/soc-chat', label: 'SOC Chat', icon: MessageSquareText },
-  { to: '/admin', label: 'Administration', icon: Settings2, adminOnly: true },
+const nav: {
+  to: string
+  labelKey: MessageKey
+  icon: typeof LayoutDashboard
+  end?: boolean
+  adminOnly?: boolean
+}[] = [
+  { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, end: true },
+  { to: '/assets', labelKey: 'nav.assets', icon: Server },
+  { to: '/scans', labelKey: 'nav.scans', icon: Radar },
+  { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities', icon: ShieldAlert },
+  { to: '/soc-chat', labelKey: 'nav.socChat', icon: MessageSquareText },
+  {
+    to: '/admin',
+    labelKey: 'nav.admin',
+    icon: Settings2,
+    adminOnly: true,
+  },
 ]
 
 export function AppShell() {
   const { logout, usingMock, isAdmin, user } = useAuth()
+  const { t } = useLocale()
   const navigate = useNavigate()
 
   const items = nav.filter((item) => !item.adminOnly || isAdmin)
@@ -40,13 +55,13 @@ export function AppShell() {
                 NexuSec
               </div>
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-surface-400">
-                SOC Console
+                {t('brand.console')}
               </div>
             </div>
           </div>
 
           <nav className="flex flex-1 flex-col gap-1">
-            {items.map(({ to, label, icon: Icon, end }) => (
+            {items.map(({ to, labelKey, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -61,12 +76,13 @@ export function AppShell() {
                 }
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {label}
+                {t(labelKey)}
               </NavLink>
             ))}
           </nav>
 
           <div className="mt-auto space-y-3 border-t border-surface-700 pt-4">
+            <LanguageToggle />
             {user && (
               <div className="px-2 text-xs text-surface-400">
                 <div className="truncate text-surface-200">{user.full_name}</div>
@@ -78,7 +94,7 @@ export function AppShell() {
             {usingMock && (
               <div className="flex items-center gap-2 rounded-md bg-warn/10 px-3 py-2 font-mono text-[11px] text-warn">
                 <Activity className="h-3.5 w-3.5" />
-                Demo data mode
+                {t('common.demoMode')}
               </div>
             )}
             <button
@@ -90,7 +106,7 @@ export function AppShell() {
               className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-surface-400 transition-colors hover:bg-surface-800 hover:text-surface-100"
             >
               <LogOut className="h-4 w-4" />
-              Sign out
+              {t('common.signOut')}
             </button>
           </div>
         </aside>

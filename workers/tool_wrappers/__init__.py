@@ -9,6 +9,7 @@ from workers.tool_wrappers.base import (
     ToolTimeoutError,
 )
 from workers.tool_wrappers.nmap import NmapScanRequest, NmapWrapper
+from workers.tool_wrappers.nuclei import NucleiScanRequest, NucleiWrapper
 from workers.tool_wrappers.validators import (
     TargetValidationError,
     validate_domain,
@@ -21,6 +22,8 @@ __all__ = [
     "ExecutionResult",
     "NmapScanRequest",
     "NmapWrapper",
+    "NucleiScanRequest",
+    "NucleiWrapper",
     "ResourceLimits",
     "SecureExecutor",
     "TargetValidationError",

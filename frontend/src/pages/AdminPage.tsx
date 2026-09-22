@@ -13,6 +13,7 @@ import type {
   OrganizationMetrics,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { useLocale } from '../i18n/locale'
 
 type Tab = 'overview' | 'users' | 'organizations' | 'system'
 
@@ -22,6 +23,7 @@ function roleLabel(role: string): string {
 
 export function AdminPage() {
   const { user, isAdmin, usingMock, token } = useAuth()
+  const { t } = useLocale()
   const [tab, setTab] = useState<Tab>('overview')
   const [error, setError] = useState<string | null>(null)
   const [org, setOrg] = useState<Organization | null>(null)
@@ -161,10 +163,9 @@ export function AdminPage() {
   if (!isAdmin && !loading) {
     return (
       <div className="panel rounded-xl p-8">
-        <h1 className="text-lg font-semibold">Administration</h1>
+        <h1 className="text-lg font-semibold">{t('admin.title')}</h1>
         <p className="mt-2 text-sm text-surface-400">
-          You need Admin or Super Admin access to manage tenants, users, and
-          system health.
+          {t('admin.denied')}
         </p>
       </div>
     )
@@ -175,13 +176,13 @@ export function AdminPage() {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-accent">
-            Platform
+            {t('admin.eyebrow')}
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            Administration
+            {t('admin.title')}
           </h1>
           <p className="mt-1 text-sm text-surface-400">
-            Tenants, users, RBAC, and system health for NexuSec.
+            {t('admin.subtitle')}
           </p>
         </div>
         {user && (

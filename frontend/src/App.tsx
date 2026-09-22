@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import { AppShell } from './components/AppShell'
+import { LocaleProvider } from './i18n/locale'
 import { AdminPage } from './pages/AdminPage'
 import { AssetsPage } from './pages/AssetsPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -19,29 +20,31 @@ function Protected({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          element={
-            <Protected>
-              <AppShell />
-            </Protected>
-          }
-        >
-          <Route index element={<DashboardPage />} />
-          <Route path="assets" element={<AssetsPage />} />
-          <Route path="scans" element={<ScansPage />} />
-          <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
+    <LocaleProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
           <Route
-            path="vulnerabilities/:id"
-            element={<VulnerabilityDetailPage />}
-          />
-          <Route path="soc-chat" element={<SocChatPage />} />
-          <Route path="admin" element={<AdminPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
+            element={
+              <Protected>
+                <AppShell />
+              </Protected>
+            }
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="assets" element={<AssetsPage />} />
+            <Route path="scans" element={<ScansPage />} />
+            <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
+            <Route
+              path="vulnerabilities/:id"
+              element={<VulnerabilityDetailPage />}
+            />
+            <Route path="soc-chat" element={<SocChatPage />} />
+            <Route path="admin" element={<AdminPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </LocaleProvider>
   )
 }

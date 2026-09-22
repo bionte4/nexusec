@@ -3,6 +3,7 @@ import { MessageSquareText, Send } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import type { SocChatResponse } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { useLocale } from '../i18n/locale'
 
 const SUGGESTIONS = [
   'Which assets currently violate PCI-DSS requirements?',
@@ -25,6 +26,7 @@ _Demo mode — connect the API for live RAG answers._`
 
 export function SocChatPage() {
   const { usingMock, token } = useAuth()
+  const { t } = useLocale()
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +56,7 @@ export function SocChatPage() {
         setResult(resp)
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Chat request failed')
+      setError(err instanceof ApiError ? err.message : t('soc.failed'))
     } finally {
       setLoading(false)
     }
@@ -71,13 +73,12 @@ export function SocChatPage() {
         <div className="flex items-center gap-2 text-accent">
           <MessageSquareText className="h-5 w-5" />
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-surface-400">
-            ChatOps
+            {t('soc.eyebrow')}
           </span>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">SOC assistant</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('soc.title')}</h1>
         <p className="text-sm text-surface-400">
-          Ask natural-language questions about assets, PCI-DSS/CDE scope, and
-          vulnerabilities. Answers are grounded in live database retrieval.
+          {t('soc.subtitle')}
         </p>
       </header>
 
@@ -102,7 +103,7 @@ export function SocChatPage() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask the SOC assistant…"
+          placeholder={t('soc.placeholder')}
           className="flex-1 rounded-lg border border-surface-600 bg-surface-900 px-3 py-2.5 text-sm outline-none focus:border-accent"
         />
         <button
@@ -111,7 +112,7 @@ export function SocChatPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
         >
           <Send className="h-4 w-4" />
-          {loading ? '…' : 'Ask'}
+          {loading ? '…' : t('soc.send')}
         </button>
       </form>
 
@@ -142,7 +143,7 @@ export function SocChatPage() {
           {result.sources.length > 0 ? (
             <div className="border-t border-surface-700 pt-3">
               <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wider text-surface-400">
-                Sources
+                {t('soc.sources')}
               </h3>
               <ul className="space-y-1 font-mono text-[11px] text-surface-400">
                 {result.sources.slice(0, 12).map((s, i) => (
