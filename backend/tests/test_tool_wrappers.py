@@ -46,13 +46,17 @@ def test_validate_domain_ok() -> None:
 def test_validate_domain_rejects_metacharacters() -> None:
     with pytest.raises(TargetValidationError):
         validate_domain("evil.com;whoami")
-    with pytest.raises(TargetValidationError):
-        validate_domain("http://evil.com")
+
+
+def test_validate_domain_strips_url_wrappers() -> None:
+    assert validate_domain("https://evil.com/") == "evil.com"
+    assert validate_domain("http://api.example.org/path") == "api.example.org"
 
 
 def test_validate_target_accepts_ip_or_domain() -> None:
     assert validate_target("192.168.1.10") == "192.168.1.10"
     assert validate_target("api.example.org") == "api.example.org"
+    assert validate_target("https://desainkuproject.web.id/") == "desainkuproject.web.id"
 
 
 def test_nmap_build_argv_allowlist_and_safe_output() -> None:

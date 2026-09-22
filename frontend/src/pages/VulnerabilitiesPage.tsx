@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Filter, Search } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Filter, Search, X } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import type {
   FindingStatus,
@@ -39,6 +39,10 @@ function complianceKeys(v: Vulnerability): string[] {
 export function VulnerabilitiesPage() {
   const { usingMock, setUsingMock, token } = useAuth()
   const { t } = useLocale()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filterAssetId = searchParams.get('asset_id') || ''
+  const filterScanId = searchParams.get('scan_id') || ''
+
   const [items, setItems] = useState<Vulnerability[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -74,6 +78,8 @@ export function VulnerabilitiesPage() {
           severity: severity || undefined,
           status: status || undefined,
           search: search || undefined,
+          asset_id: filterAssetId || undefined,
+          scan_id: filterScanId || undefined,
         })
         if (!cancelled) {
           setItems(res.items)
@@ -100,10 +106,22 @@ export function VulnerabilitiesPage() {
     return () => {
       cancelled = true
     }
-  }, [severity, status, search, usingMock, token, setUsingMock, t])
+  }, [
+    severity,
+    status,
+    search,
+    filterAssetId,
+    filterScanId,
+    usingMock,
+    token,
+    setUsingMock,
+    t,
+  ])
 
   const filtered = useMemo(() => {
     return items.filter((v) => {
+      if (filterAssetId && v.asset_id !== filterAssetId) return false
+      if (filterScanId && v.scan_id !== filterScanId) return false
       if (severity && v.severity !== severity) return false
       if (status && v.status !== status) return false
       if (
@@ -130,7 +148,23 @@ export function VulnerabilitiesPage() {
       }
       return true
     })
-  }, [items, severity, status, assetQuery, compliance, search])
+  }, [
+    items,
+    severity,
+    status,
+    assetQuery,
+    compliance,
+    search,
+    filterAssetId,
+    filterScanId,
+  ])
+
+  function clearScopeFilters() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('asset_id')
+    next.delete('scan_id')
+    setSearchParams(next, { replace: true })
+  }
 
   return (
     <div className="space-y-6">
@@ -145,6 +179,24 @@ export function VulnerabilitiesPage() {
           {t('vulns.subtitle')}
         </p>
       </header>
+
+      {filterAssetId || filterScanId ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2 text-xs text-accent">
+          <span>
+            {filterScanId
+              ? t('vulns.scopedScan', { id: filterScanId.slice(0, 8) })
+              : t('vulns.scopedAsset', { id: filterAssetId.slice(0, 8) })}
+          </span>
+          <button
+            type="button"
+            onClick={clearScopeFilters}
+            className="inline-flex items-center gap-1 rounded-md border border-accent/40 px-2 py-0.5 text-[11px] hover:bg-accent/20"
+          >
+            <X className="h-3 w-3" />
+            {t('vulns.clearScope')}
+          </button>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg border border-warn/30 bg-warn/10 px-4 py-2 text-xs text-warn">

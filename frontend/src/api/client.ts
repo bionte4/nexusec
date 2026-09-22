@@ -102,6 +102,7 @@ export const api = {
     if (params.status) q.set('status', params.status)
     if (params.severity) q.set('severity', params.severity)
     if (params.asset_id) q.set('asset_id', params.asset_id)
+    if (params.scan_id) q.set('scan_id', params.scan_id)
     if (params.search) q.set('search', params.search)
     const qs = q.toString()
     return request<VulnerabilityListResponse>(
@@ -239,6 +240,13 @@ export const api = {
   createAsset(payload: AssetCreatePayload) {
     return request<Asset>('/api/v1/assets', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  updateAsset(id: string, payload: Partial<AssetCreatePayload>) {
+    return request<Asset>(`/api/v1/assets/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     })
   },

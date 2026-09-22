@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Server } from 'lucide-react'
+import { Pencil, Plus, Search, Server, X } from 'lucide-react'
 import {
   api,
   ApiError,
@@ -37,7 +37,8 @@ export function AssetsPage() {
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [selectedOrg, setSelectedOrg] = useState(() => getOrganizationId() ?? '')
 
-  const [form, setForm] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const emptyForm = {
     name: '',
     asset_type: 'domain' as AssetType,
     criticality: 'medium' as AssetCriticality,
@@ -49,7 +50,8 @@ export function AssetsPage() {
     owner: '',
     description: '',
     is_cde_scope: false,
-  })
+  }
+  const [form, setForm] = useState(emptyForm)
 
   const load = useCallback(async () => {
     if (usingMock || token === 'demo') {
@@ -93,7 +95,31 @@ export function AssetsPage() {
     void load()
   }
 
-  async function onCreate(e: FormEvent) {
+  function beginEdit(a: Asset) {
+    setEditingId(a.id)
+    setForm({
+      name: a.name,
+      asset_type: a.asset_type,
+      criticality: a.criticality,
+      ip_address: a.ip_address ?? '',
+      domain: a.domain ?? '',
+      cloud_resource_id: a.cloud_resource_id ?? '',
+      url: a.url ?? '',
+      environment: a.environment ?? '',
+      owner: a.owner ?? '',
+      description: a.description ?? '',
+      is_cde_scope: a.is_cde_scope,
+    })
+    setNotice(null)
+    setError(null)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setForm(emptyForm)
+  }
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!canWrite) return
     setBusy(true)
@@ -116,24 +142,24 @@ export function AssetsPage() {
         description: form.description.trim() || null,
         is_cde_scope: form.is_cde_scope,
       }
-      const created = await api.createAsset(payload)
-      setNotice(t('assets.created', { name: created.name }))
-      setForm({
-        name: '',
-        asset_type: 'domain',
-        criticality: 'medium',
-        ip_address: '',
-        domain: '',
-        cloud_resource_id: '',
-        url: '',
-        environment: 'production',
-        owner: '',
-        description: '',
-        is_cde_scope: false,
-      })
+      if (editingId) {
+        const updated = await api.updateAsset(editingId, payload)
+        setNotice(t('assets.updated', { name: updated.name }))
+        cancelEdit()
+      } else {
+        const created = await api.createAsset(payload)
+        setNotice(t('assets.created', { name: created.name }))
+        setForm(emptyForm)
+      }
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('assets.createFailed'))
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : editingId
+            ? t('assets.updateFailed')
+            : t('assets.createFailed'),
+      )
     } finally {
       setBusy(false)
     }
@@ -186,12 +212,16 @@ export function AssetsPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         {canWrite ? (
           <form
-            onSubmit={onCreate}
+            onSubmit={onSubmit}
             className="panel space-y-3 rounded-xl p-5 lg:col-span-1"
           >
             <h2 className="flex items-center gap-2 text-sm font-medium">
-              <Plus className="h-4 w-4 text-accent" />
-              {t('assets.register')}
+              {editingId ? (
+                <Pencil className="h-4 w-4 text-accent" />
+              ) : (
+                <Plus className="h-4 w-4 text-accent" />
+              )}
+              {editingId ? t('assets.edit') : t('assets.register')}
             </h2>
             <input
               required
@@ -290,13 +320,29 @@ export function AssetsPage() {
               />
               {t('assets.cdeScope')}
             </label>
-            <button
-              type="submit"
-              disabled={busy || !form.name.trim()}
-              className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
-            >
-              {busy ? t('assets.saving') : t('assets.create')}
-            </button>
+            <div className="flex gap-2">
+              {editingId ? (
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-surface-600 px-3 py-2 text-sm text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  {t('common.cancel')}
+                </button>
+              ) : null}
+              <button
+                type="submit"
+                disabled={busy || !form.name.trim()}
+                className="flex-1 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
+              >
+                {busy
+                  ? t('assets.saving')
+                  : editingId
+                    ? t('assets.save')
+                    : t('assets.create')}
+              </button>
+            </div>
             {!isAdmin && user?.role === 'soc_analyst' ? (
               <p className="text-[11px] text-surface-400">
                 SOC analysts can view assets but cannot create them.
@@ -346,6 +392,16 @@ export function AssetsPage() {
                     <span className="rounded-md bg-surface-800 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-surface-300">
                       {a.criticality}
                     </span>
+                    {canWrite ? (
+                      <button
+                        type="button"
+                        onClick={() => beginEdit(a)}
+                        className="inline-flex items-center gap-1 text-xs text-surface-300 hover:text-accent"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {t('common.edit')}
+                      </button>
+                    ) : null}
                     <Link
                       to={`/vulnerabilities?asset_id=${a.id}`}
                       className="text-xs text-accent hover:underline"

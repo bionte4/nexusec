@@ -188,6 +188,7 @@ export interface VulnListParams {
   status?: FindingStatus | ''
   severity?: Severity | ''
   asset_id?: string
+  scan_id?: string
   search?: string
 }
 

@@ -33,19 +33,29 @@ def _utcnow() -> datetime:
 
 
 def _targets_from_assets(assets: list[Asset]) -> list[str]:
+    from workers.tool_wrappers.validators import coerce_host
+
     targets: list[str] = []
     for asset in assets:
+        raw: str | None = None
         if asset.asset_type == AssetType.IP and asset.ip_address:
-            targets.append(str(asset.ip_address))
+            raw = str(asset.ip_address)
         elif asset.asset_type == AssetType.DOMAIN and asset.domain:
-            targets.append(asset.domain)
+            raw = asset.domain
         elif asset.hostname:
-            targets.append(asset.hostname)
+            raw = asset.hostname
         elif asset.domain:
-            targets.append(asset.domain)
+            raw = asset.domain
         elif asset.ip_address:
-            targets.append(str(asset.ip_address))
-    # de-dupe preserve order
+            raw = str(asset.ip_address)
+        elif getattr(asset, "url", None):
+            raw = asset.url
+        if not raw:
+            continue
+        try:
+            targets.append(coerce_host(raw))
+        except Exception:  # noqa: BLE001 — skip bad rows; wrapper will fail if empty
+            logger.warning("Skipping unscannable asset target: %r", raw)
     seen: set[str] = set()
     unique: list[str] = []
     for t in targets:
@@ -57,20 +67,29 @@ def _targets_from_assets(assets: list[Asset]) -> list[str]:
 
 def _nuclei_targets_from_assets(assets: list[Asset]) -> list[str]:
     """Prefer explicit URL; otherwise derive http(s) endpoints from domain/IP."""
+    from workers.tool_wrappers.nuclei import validate_nuclei_target
+    from workers.tool_wrappers.validators import TargetValidationError
+
     targets: list[str] = []
     for asset in assets:
+        candidates: list[str] = []
         url = (getattr(asset, "url", None) or "").strip()
         if url:
-            targets.append(url)
-            continue
-        if asset.domain:
-            targets.append(f"https://{asset.domain}")
-            continue
-        if asset.hostname:
-            targets.append(f"https://{asset.hostname}")
-            continue
-        if asset.ip_address:
-            targets.append(f"http://{asset.ip_address}")
+            candidates.append(url)
+        elif asset.domain:
+            # domain may accidentally contain a full URL — normalize later
+            domain = asset.domain.strip()
+            candidates.append(domain if "://" in domain else f"https://{domain}")
+        elif asset.hostname:
+            host = asset.hostname.strip()
+            candidates.append(host if "://" in host else f"https://{host}")
+        elif asset.ip_address:
+            candidates.append(f"http://{asset.ip_address}")
+        for c in candidates:
+            try:
+                targets.append(validate_nuclei_target(c))
+            except TargetValidationError:
+                logger.warning("Skipping invalid Nuclei target: %r", c)
     seen: set[str] = set()
     unique: list[str] = []
     for t in targets:

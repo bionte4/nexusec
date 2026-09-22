@@ -25,6 +25,52 @@ def _normalize_ip(value: object) -> str | None:
     return str(IPvAnyAddress(str(value)))
 
 
+def _normalize_domain_like(value: object) -> str | None:
+    """Accept bare FQDN or URL; store hostname only."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    from urllib.parse import urlparse
+
+    candidate = raw
+    if "://" in raw or raw.startswith("//"):
+        parsed = urlparse(raw if "://" in raw else f"https:{raw}")
+        if not parsed.hostname:
+            raise ValueError(f"Invalid domain/URL: {value!r}")
+        candidate = parsed.hostname
+    else:
+        candidate = raw.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        if ":" in candidate and candidate.count(":") == 1:
+            host, _, port = candidate.partition(":")
+            if port.isdigit():
+                candidate = host
+    candidate = candidate.strip().lower().rstrip(".")
+    if not candidate:
+        raise ValueError(f"Invalid domain/URL: {value!r}")
+    return candidate
+
+
+def _normalize_url(value: object) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    from urllib.parse import urlparse
+
+    if "://" not in raw:
+        raw = f"https://{raw.lstrip('/')}"
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError(f"Invalid URL (http/https required): {value!r}")
+    host = parsed.hostname.lower().rstrip(".")
+    port = f":{parsed.port}" if parsed.port else ""
+    path = parsed.path if parsed.path not in {"", "/"} else ""
+    return f"{parsed.scheme}://{host}{port}{path}"
+
+
 class AssetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     asset_type: AssetType
@@ -47,12 +93,23 @@ class AssetCreate(BaseModel):
     def validate_ip_address(cls, value: object) -> str | None:
         return _normalize_ip(value)
 
+    @field_validator("domain", "hostname", mode="before")
+    @classmethod
+    def validate_domain_fields(cls, value: object) -> str | None:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return _normalize_domain_like(value)
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def validate_url_field(cls, value: object) -> str | None:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return _normalize_url(value)
+
     @field_validator(
-        "domain",
         "cloud_resource_id",
         "cloud_provider",
-        "hostname",
-        "url",
         "environment",
         "owner",
         "description",
@@ -96,6 +153,24 @@ class AssetUpdate(BaseModel):
     @classmethod
     def validate_ip_address(cls, value: object) -> str | None:
         return _normalize_ip(value)
+
+    @field_validator("domain", "hostname", mode="before")
+    @classmethod
+    def validate_domain_fields(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return _normalize_domain_like(value)
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def validate_url_field(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        return _normalize_url(value)
 
 
 class AssetRead(BaseModel):

@@ -342,6 +342,12 @@ export function ScansPage() {
                       >
                         {s.status}
                       </span>
+                      <Link
+                        to={`/vulnerabilities?scan_id=${s.id}`}
+                        className="text-xs text-accent hover:underline"
+                      >
+                        {t('common.findings')}
+                      </Link>
                       {canWrite &&
                       (s.status === 'pending' || s.status === 'failed') ? (
                         <button
