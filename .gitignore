@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment & secrets
+.env
+.env.local
+*.pem
+*.key
+secrets/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Build / runtime
+dist/
+build/
+*.log
+tmp/
+.cache/
+
+# Go
+scanner/bin/
+scanner/vendor/
+
+# Node / frontend (future)
+node_modules/
+.next/
+out/
+
+# Docker volumes
+pgdata/
+redisdata/

@@ -1,0 +1,65 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Sora', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-surface-950: #070a0e;
+  --color-surface-900: #0b1017;
+  --color-surface-850: #101820;
+  --color-surface-800: #151e28;
+  --color-surface-700: #1c2734;
+  --color-surface-600: #2a3848;
+  --color-surface-400: #7a8fa3;
+  --color-surface-300: #a8b8c8;
+  --color-surface-100: #e8eef4;
+
+  --color-accent: #1ec8b2;
+  --color-accent-dim: #149a89;
+  --color-warn: #e8a838;
+  --color-danger: #e85d4c;
+  --color-ok: #3ecf8e;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-surface-100);
+    background:
+      radial-gradient(ellipse 80% 50% at 10% -10%, rgba(30, 200, 178, 0.08), transparent 50%),
+      radial-gradient(ellipse 60% 40% at 90% 0%, rgba(232, 168, 56, 0.05), transparent 45%),
+      linear-gradient(180deg, var(--color-surface-950) 0%, var(--color-surface-900) 100%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgba(30, 200, 178, 0.35);
+  }
+}
+
+@layer utilities {
+  .panel {
+    background: color-mix(in srgb, var(--color-surface-850) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-surface-600) 70%, transparent);
+    backdrop-filter: blur(8px);
+  }
+
+  .grid-noise {
+    background-image:
+      linear-gradient(rgba(122, 143, 163, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(122, 143, 163, 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}

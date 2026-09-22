@@ -1,0 +1,107 @@
+import type {
+  DashboardOverview,
+  LoginResponse,
+  VulnListParams,
+  Vulnerability,
+  VulnerabilityListResponse,
+} from './types'
+
+const TOKEN_KEY = 'nexusec_access_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(options.headers)
+  if (!headers.has('Content-Type') && options.body) {
+    headers.set('Content-Type', 'application/json')
+  }
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const res = await fetch(path, { ...options, headers })
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = (await res.json()) as { detail?: string }
+      if (body.detail) detail = body.detail
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  if (res.status === 204) return undefined as T
+  return (await res.json()) as T
+}
+
+export const api = {
+  login(email: string, password: string) {
+    return request<LoginResponse>('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+  },
+
+  dashboardOverview(trendDays = 30) {
+    return request<DashboardOverview>(
+      `/api/v1/dashboard/overview?trend_days=${trendDays}`,
+    )
+  },
+
+  listVulnerabilities(params: VulnListParams = {}) {
+    const q = new URLSearchParams()
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    if (params.status) q.set('status', params.status)
+    if (params.severity) q.set('severity', params.severity)
+    if (params.asset_id) q.set('asset_id', params.asset_id)
+    if (params.search) q.set('search', params.search)
+    const qs = q.toString()
+    return request<VulnerabilityListResponse>(
+      `/api/v1/vulnerabilities${qs ? `?${qs}` : ''}`,
+    )
+  },
+
+  getVulnerability(id: string) {
+    return request<Vulnerability>(`/api/v1/vulnerabilities/${id}`)
+  },
+
+  assignOwner(id: string, remediation_owner_label: string) {
+    return request<Vulnerability>(`/api/v1/vulnerabilities/${id}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ remediation_owner_label }),
+    })
+  },
+
+  updateVulnerability(
+    id: string,
+    payload: {
+      status?: string
+      remediation?: string
+      remediation_owner_label?: string
+    },
+  ) {
+    return request<Vulnerability>(`/api/v1/vulnerabilities/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+}

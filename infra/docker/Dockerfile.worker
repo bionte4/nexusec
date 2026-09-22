@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1.7
+# Celery worker (integrations / general tasks) — non-root, no scanner binaries.
+FROM python:3.12-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip \
+    && /opt/venv/bin/pip install -r requirements.txt
+
+
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/backend:/app \
+    PATH="/opt/venv/bin:$PATH" \
+    APP_HOME=/app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 nexusec \
+    && useradd --uid 10001 --gid nexusec --shell /usr/sbin/nologin --create-home nexusec
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR ${APP_HOME}
+
+COPY --chown=nexusec:nexusec backend/ ${APP_HOME}/backend/
+COPY --chown=nexusec:nexusec workers/ ${APP_HOME}/workers/
+
+USER nexusec
+
+CMD ["celery", "-A", "workers.celery_app.celery_app", "worker", \
+     "--loglevel=INFO", "--queues=default,integrations", "--concurrency=2"]

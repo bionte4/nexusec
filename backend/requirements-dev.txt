@@ -1,0 +1,6 @@
+# Development / CI tooling (not installed in production images).
+-r requirements.txt
+black>=24.10.0
+flake8>=7.1.0
+pip-audit>=2.7.0
+bandit>=1.8.0

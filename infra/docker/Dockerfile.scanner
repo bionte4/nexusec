@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1.7
+# Isolated scanner worker — Nmap + custom asyncio scanner, non-root, scan queue only.
+FROM python:3.12-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip \
+    && /opt/venv/bin/pip install -r requirements.txt
+
+
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/backend:/app:/app/scanners/python \
+    PATH="/opt/venv/bin:$PATH" \
+    APP_HOME=/app
+
+# nmap for third-party wrapper; connect-scan (-sT) works without NET_RAW as non-root.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    nmap \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10002 scanner \
+    && useradd --uid 10002 --gid scanner --shell /usr/sbin/nologin --create-home scanner \
+    && mkdir -p /tmp/scanner \
+    && chown -R scanner:scanner /tmp/scanner
+
+COPY --from=builder /opt/venv /opt/venv
+
+WORKDIR ${APP_HOME}
+
+COPY --chown=scanner:scanner backend/ ${APP_HOME}/backend/
+COPY --chown=scanner:scanner workers/ ${APP_HOME}/workers/
+COPY --chown=scanner:scanner scanners/python/ ${APP_HOME}/scanners/python/
+
+USER scanner
+
+# Isolated queue: only scan-related Celery tasks.
+CMD ["celery", "-A", "workers.celery_app.celery_app", "worker", \
+     "--loglevel=INFO", "--queues=scans", "--concurrency=1", "--hostname=scanner@%h"]
