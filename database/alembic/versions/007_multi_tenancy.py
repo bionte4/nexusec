@@ -54,22 +54,20 @@ def upgrade() -> None:
     op.create_index("ix_organizations_slug", "organizations", ["slug"], unique=True)
     op.create_index("ix_organizations_is_active", "organizations", ["is_active"])
 
-    # Seed default tenant for existing rows
+    # Seed default tenant for existing rows (literal ::uuid — avoid VARCHAR bind mismatch)
     op.execute(
-        sa.text(
-            """
-            INSERT INTO organizations (id, name, slug, description, is_active, settings)
-            VALUES (
-                :id,
-                'Default Organization',
-                'default',
-                'Bootstrap tenant for pre-multi-tenancy data',
-                true,
-                '{}'::jsonb
-            )
-            ON CONFLICT DO NOTHING
-            """
-        ).bindparams(id=DEFAULT_ORG_ID)
+        f"""
+        INSERT INTO organizations (id, name, slug, description, is_active, settings)
+        VALUES (
+            '{DEFAULT_ORG_ID}'::uuid,
+            'Default Organization',
+            'default',
+            'Bootstrap tenant for pre-multi-tenancy data',
+            true,
+            '{{}}'::jsonb
+        )
+        ON CONFLICT DO NOTHING
+        """
     )
 
     op.add_column(
@@ -78,9 +76,8 @@ def upgrade() -> None:
     )
     op.create_index("ix_users_organization_id", "users", ["organization_id"])
     op.execute(
-        sa.text("UPDATE users SET organization_id = :oid WHERE organization_id IS NULL").bindparams(
-            oid=DEFAULT_ORG_ID
-        )
+        f"UPDATE users SET organization_id = '{DEFAULT_ORG_ID}'::uuid "
+        "WHERE organization_id IS NULL"
     )
     op.create_foreign_key(
         "fk_users_organization_id",
@@ -97,9 +94,8 @@ def upgrade() -> None:
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=True),
         )
         op.execute(
-            sa.text(
-                f"UPDATE {table} SET organization_id = :oid WHERE organization_id IS NULL"
-            ).bindparams(oid=DEFAULT_ORG_ID)
+            f"UPDATE {table} SET organization_id = '{DEFAULT_ORG_ID}'::uuid "
+            "WHERE organization_id IS NULL"
         )
         op.alter_column(table, "organization_id", nullable=False)
         op.create_index(f"ix_{table}_organization_id", table, ["organization_id"])
@@ -118,9 +114,8 @@ def upgrade() -> None:
     )
     op.create_index("ix_audit_logs_organization_id", "audit_logs", ["organization_id"])
     op.execute(
-        sa.text(
-            "UPDATE audit_logs SET organization_id = :oid WHERE organization_id IS NULL"
-        ).bindparams(oid=DEFAULT_ORG_ID)
+        f"UPDATE audit_logs SET organization_id = '{DEFAULT_ORG_ID}'::uuid "
+        "WHERE organization_id IS NULL"
     )
     op.create_foreign_key(
         "fk_audit_logs_organization_id",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import UserRole
@@ -19,8 +19,8 @@ from app.core.security import (
 )
 from app.models.organization import Organization
 from app.models.user import User
+from app.schemas import UserListResponse, UserRead
 from app.schemas.auth import LoginResponse, RegisterRequest, TokenPair
-from app.schemas import UserRead
 
 
 class AuthError(Exception):
@@ -105,6 +105,54 @@ class AuthService:
         await self.db.flush()
         await self.db.refresh(user)
         return UserRead.model_validate(user)
+
+    async def list_users(
+        self,
+        *,
+        actor: User,
+        page: int = 1,
+        page_size: int = 20,
+        search: str | None = None,
+    ) -> UserListResponse:
+        """List users visible to the actor (tenant-scoped for Admin)."""
+        filters = []
+        if actor.role == UserRole.SUPER_ADMIN:
+            pass
+        elif actor.role == UserRole.ADMIN:
+            if actor.organization_id is None:
+                raise AuthError("Admin has no organization", status_code=400)
+            filters.append(User.organization_id == actor.organization_id)
+        else:
+            raise AuthError("Only Admins can list users", status_code=403)
+
+        if search:
+            term = f"%{search.strip().lower()}%"
+            filters.append(
+                or_(
+                    func.lower(User.email).like(term),
+                    func.lower(User.full_name).like(term),
+                )
+            )
+
+        count_stmt = select(func.count()).select_from(User)
+        list_stmt = select(User).order_by(User.created_at.desc())
+        for f in filters:
+            count_stmt = count_stmt.where(f)
+            list_stmt = list_stmt.where(f)
+
+        total = int(await self.db.scalar(count_stmt) or 0)
+        pages = max(1, (total + page_size - 1) // page_size) if total else 1
+        offset = (page - 1) * page_size
+        rows = (
+            await self.db.scalars(list_stmt.offset(offset).limit(page_size))
+        ).all()
+        return UserListResponse(
+            items=[UserRead.model_validate(u) for u in rows],
+            total=total,
+            page=page,
+            page_size=page_size,
+            pages=pages,
+        )
 
     async def login(self, email: str, password: str) -> LoginResponse:
         user = await self.db.scalar(select(User).where(func.lower(User.email) == email.lower()))

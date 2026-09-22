@@ -48,6 +48,11 @@ CI: `.github/workflows/ci.yml` runs Black, Flake8, pytest, pip-audit, Bandit, fr
 
 API docs: http://localhost:8000/docs
 
+## Usage guides
+
+- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei), normalize, triage, compliance reports
+- Data model: [`docs/data-model.md`](docs/data-model.md)
+
 ## Auth (Prompt 2)
 
 ```bash

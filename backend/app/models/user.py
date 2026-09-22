@@ -6,12 +6,12 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.core.enums import UserRole
+from app.core.enums import UserRole, pg_enum
 
 if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
@@ -27,7 +27,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", native_enum=True),
+        pg_enum(UserRole, "user_role"),
         default=UserRole.SOC_ANALYST,
         nullable=False,
         index=True,

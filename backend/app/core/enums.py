@@ -3,7 +3,22 @@
 from __future__ import annotations
 
 import enum
-from typing import FrozenSet
+from typing import FrozenSet, TypeVar
+
+from sqlalchemy import Enum as SAEnum
+
+_E = TypeVar("_E", bound=enum.Enum)
+
+
+def pg_enum(enum_cls: type[_E], name: str) -> SAEnum:
+    """PostgreSQL native ENUM bound to *values* (not member names)."""
+
+    return SAEnum(
+        enum_cls,
+        name=name,
+        native_enum=True,
+        values_callable=lambda members: [item.value for item in members],
+    )
 
 
 class UserRole(str, enum.Enum):

@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquareText,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
@@ -13,11 +14,14 @@ const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/vulnerabilities', label: 'Vulnerabilities', icon: ShieldAlert },
   { to: '/soc-chat', label: 'SOC Chat', icon: MessageSquareText },
+  { to: '/admin', label: 'Administration', icon: Settings2, adminOnly: true },
 ]
 
 export function AppShell() {
-  const { logout, usingMock } = useAuth()
+  const { logout, usingMock, isAdmin, user } = useAuth()
   const navigate = useNavigate()
+
+  const items = nav.filter((item) => !item.adminOnly || isAdmin)
 
   return (
     <div className="grid-noise min-h-screen">
@@ -38,7 +42,7 @@ export function AppShell() {
           </div>
 
           <nav className="flex flex-1 flex-col gap-1">
-            {nav.map(({ to, label, icon: Icon, end }) => (
+            {items.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -59,6 +63,14 @@ export function AppShell() {
           </nav>
 
           <div className="mt-auto space-y-3 border-t border-surface-700 pt-4">
+            {user && (
+              <div className="px-2 text-xs text-surface-400">
+                <div className="truncate text-surface-200">{user.full_name}</div>
+                <div className="font-mono uppercase tracking-wide text-[10px] text-accent">
+                  {user.role.replaceAll('_', ' ')}
+                </div>
+              </div>
+            )}
             {usingMock && (
               <div className="flex items-center gap-2 rounded-md bg-warn/10 px-3 py-2 font-mono text-[11px] text-warn">
                 <Activity className="h-3.5 w-3.5" />

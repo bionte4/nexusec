@@ -40,6 +40,14 @@ class UserRead(ORMModel):
     updated_at: datetime
 
 
+class UserListResponse(BaseModel):
+    items: list[UserRead]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 # --- Assets (see app.schemas.asset) ---
 
 from app.schemas.asset import (  # noqa: E402

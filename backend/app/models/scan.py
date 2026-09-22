@@ -6,12 +6,12 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.core.enums import ScanStatus, ScanType, ScannerEngine
+from app.core.enums import ScanStatus, ScanType, ScannerEngine, pg_enum
 
 if TYPE_CHECKING:
     from app.models.asset import Asset
@@ -49,18 +49,18 @@ class Scan(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scan_type: Mapped[ScanType] = mapped_column(
-        Enum(ScanType, name="scan_type", native_enum=True),
+        pg_enum(ScanType, "scan_type"),
         nullable=False,
         index=True,
     )
     engine: Mapped[ScannerEngine] = mapped_column(
-        Enum(ScannerEngine, name="scanner_engine", native_enum=True),
+        pg_enum(ScannerEngine, "scanner_engine"),
         default=ScannerEngine.NEXUSEC,
         nullable=False,
         index=True,
     )
     status: Mapped[ScanStatus] = mapped_column(
-        Enum(ScanStatus, name="scan_status", native_enum=True),
+        pg_enum(ScanStatus, "scan_status"),
         default=ScanStatus.PENDING,
         nullable=False,
         index=True,

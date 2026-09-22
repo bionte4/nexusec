@@ -129,6 +129,57 @@ export interface LoginResponse {
   access_token: string
   refresh_token: string
   token_type: string
+  user?: AuthUser
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  full_name: string
+  role: 'super_admin' | 'admin' | 'pentester' | 'soc_analyst'
+  organization_id: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserListResponse {
+  items: AuthUser[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface Organization {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  is_active: boolean
+  workspace_token_prefix: string | null
+  settings: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationListResponse {
+  items: Organization[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface OrganizationMetrics {
+  organization_id: string
+  users: number
+  assets: number
+  scans: number
+  open_vulnerabilities: number
+  critical_open: number
+  actively_exploited: number
+  cde_assets: number
 }
 
 export interface VulnListParams {

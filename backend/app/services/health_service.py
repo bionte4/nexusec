@@ -120,19 +120,24 @@ class HealthService:
             import sys
             from pathlib import Path
 
-            root = Path(__file__).resolve().parents[3]
-            if str(root) not in sys.path:
-                sys.path.insert(0, str(root))
+            # Prefer /app (compose image layout), then repo root for local runs.
+            here = Path(__file__).resolve()
+            candidates = [here.parents[3], here.parents[2], Path("/app")]
+            for root in candidates:
+                if (root / "workers").is_dir() and str(root) not in sys.path:
+                    sys.path.insert(0, str(root))
             from workers.celery_app import celery_app
 
-            inspector = celery_app.control.inspect(timeout=timeout)
+            # Single ping only — stats/active multiply the inspect timeout budget.
+            inspector = celery_app.control.inspect(timeout=max(timeout, 2.0))
             ping = inspector.ping() or {}
-            stats = inspector.stats() or {}
-            active = inspector.active() or {}
-            return {"ping": ping, "stats": stats, "active": active}
+            return {"ping": ping}
 
         try:
-            data = await asyncio.wait_for(asyncio.to_thread(_inspect), timeout=timeout + 1)
+            data = await asyncio.wait_for(
+                asyncio.to_thread(_inspect),
+                timeout=max(timeout, 2.0) + 2.0,
+            )
             workers = list((data.get("ping") or {}).keys())
             if not workers:
                 return CheckResult(
@@ -142,7 +147,6 @@ class HealthService:
                     detail="No workers responded to ping",
                     meta={"workers": []},
                 )
-            active_tasks = sum(len(v or []) for v in (data.get("active") or {}).values())
             return CheckResult(
                 name="celery",
                 status="ok",
@@ -150,14 +154,13 @@ class HealthService:
                 meta={
                     "workers": workers,
                     "worker_count": len(workers),
-                    "active_tasks": active_tasks,
                 },
             )
         except Exception as exc:
             logger.warning("Celery health check failed: %s", exc)
             return CheckResult(
                 name="celery",
-                status="unavailable",
+                status="degraded",
                 latency_ms=(time.perf_counter() - started) * 1000,
                 detail=str(exc.__class__.__name__),
             )
@@ -202,21 +205,17 @@ class HealthService:
                 latency_ms=latency,
                 meta={"socket": str(sock_path), "socket_present": socket_ok, "version": detail},
             )
-        if socket_ok:
-            # Socket present but CLI failed — treat as degraded (daemon may still work in-container)
-            return CheckResult(
-                name="docker",
-                status="degraded",
-                latency_ms=latency,
-                detail=detail,
-                meta={"socket": str(sock_path), "socket_present": True},
-            )
+        # API image intentionally has no Docker CLI/socket; scanners run in scanner-worker.
         return CheckResult(
             name="docker",
-            status="unavailable",
+            status="degraded",
             latency_ms=latency,
-            detail=detail or "Docker socket missing",
-            meta={"socket": str(sock_path), "socket_present": False},
+            detail=detail or "Docker not available in API container (expected)",
+            meta={
+                "socket": str(sock_path),
+                "socket_present": socket_ok,
+                "note": "Sandbox Docker is provided by the scanner-worker service",
+            },
         )
 
     async def liveness(self) -> dict[str, Any]:

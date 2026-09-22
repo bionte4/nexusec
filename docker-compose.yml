@@ -22,8 +22,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    # Host 5433 avoids clash with local Postgres on 5432; containers still use postgres:5432
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     security_opt:
       - no-new-privileges:true
 
@@ -133,6 +134,7 @@ services:
         "workers.celery_app.celery_app",
         "beat",
         "--loglevel=INFO",
+        "--schedule=/tmp/celerybeat-schedule",
       ]
     env_file:
       - .env
@@ -198,7 +200,8 @@ services:
       dockerfile: infra/docker/Dockerfile.frontend
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # Host 8081 — 8080 often used by other local stacks (e.g. omniwatch)
+      - "8081:8080"
     depends_on:
       - api
     networks:

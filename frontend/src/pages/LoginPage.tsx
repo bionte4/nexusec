@@ -7,7 +7,7 @@ import { ApiError } from '../api/client'
 export function LoginPage() {
   const { token, login, enterDemo } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('admin@nexusec.local')
+  const [email, setEmail] = useState('admin@example.com')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

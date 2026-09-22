@@ -1,8 +1,13 @@
 import type {
   AIFPAnalysisResponse,
+  AuthUser,
   DashboardOverview,
   LoginResponse,
+  Organization,
+  OrganizationListResponse,
+  OrganizationMetrics,
   SocChatResponse,
+  UserListResponse,
   VulnListParams,
   Vulnerability,
   VulnerabilityListResponse,
@@ -31,6 +36,7 @@ export class ApiError extends Error {
 async function request<T>(
   path: string,
   options: RequestInit = {},
+  allowStatuses: number[] = [],
 ): Promise<T> {
   const headers = new Headers(options.headers)
   if (!headers.has('Content-Type') && options.body) {
@@ -40,11 +46,12 @@ async function request<T>(
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const res = await fetch(path, { ...options, headers })
-  if (!res.ok) {
+  if (!res.ok && !allowStatuses.includes(res.status)) {
     let detail = res.statusText
     try {
-      const body = (await res.json()) as { detail?: string }
-      if (body.detail) detail = body.detail
+      const body = (await res.json()) as { detail?: string | unknown }
+      if (typeof body.detail === 'string') detail = body.detail
+      else if (body.detail != null) detail = JSON.stringify(body.detail)
     } catch {
       /* ignore */
     }
@@ -120,5 +127,73 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ query }),
     })
+  },
+
+  me() {
+    return request<AuthUser>('/api/v1/auth/me')
+  },
+
+  listUsers(params: { page?: number; page_size?: number; search?: string } = {}) {
+    const q = new URLSearchParams()
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    if (params.search) q.set('search', params.search)
+    const qs = q.toString()
+    return request<UserListResponse>(`/api/v1/auth/users${qs ? `?${qs}` : ''}`)
+  },
+
+  registerUser(payload: {
+    email: string
+    full_name: string
+    password: string
+    role: string
+    organization_id?: string | null
+  }) {
+    return request<AuthUser>('/api/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  listRoles() {
+    return request<{ roles: string[] }>('/api/v1/auth/roles')
+  },
+
+  myOrganization() {
+    return request<Organization>('/api/v1/organizations/me')
+  },
+
+  myOrganizationMetrics() {
+    return request<OrganizationMetrics>('/api/v1/organizations/me/metrics')
+  },
+
+  listOrganizations(params: { page?: number; page_size?: number; search?: string } = {}) {
+    const q = new URLSearchParams()
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    if (params.search) q.set('search', params.search)
+    const qs = q.toString()
+    return request<OrganizationListResponse>(
+      `/api/v1/organizations${qs ? `?${qs}` : ''}`,
+    )
+  },
+
+  createOrganization(payload: {
+    name: string
+    slug?: string
+    description?: string
+  }) {
+    return request<Organization>('/api/v1/organizations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  healthDetailed() {
+    return request<Record<string, unknown>>('/api/v1/health/detailed', {}, [503])
+  },
+
+  healthWorkers() {
+    return request<Record<string, unknown>>('/api/v1/health/workers', {}, [503])
   },
 }

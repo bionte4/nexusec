@@ -40,6 +40,7 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR ${APP_HOME}
 
 COPY --chown=nexusec:nexusec backend/ ${APP_HOME}/backend/
+COPY --chown=nexusec:nexusec workers/ ${APP_HOME}/workers/
 COPY --chown=nexusec:nexusec database/ ${APP_HOME}/database/
 COPY --chown=nexusec:nexusec infra/docker/entrypoint-api.sh /usr/local/bin/entrypoint-api.sh
 

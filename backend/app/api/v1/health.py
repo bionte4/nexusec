@@ -56,7 +56,13 @@ async def health_detailed(
     service: HealthService = Depends(get_health_service),
 ) -> dict[str, Any]:
     payload = await service.detailed(db)
-    if payload["status"] == "unavailable":
+    # 503 only when core data plane is down — Celery/Docker may be degraded in API image.
+    core = payload.get("checks") or {}
+    core_bad = any(
+        (core.get(name) or {}).get("status") == "unavailable"
+        for name in ("postgres", "redis")
+    )
+    if core_bad:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return payload
 

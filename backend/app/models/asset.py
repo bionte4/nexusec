@@ -6,12 +6,12 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.core.enums import AssetCriticality, AssetType
+from app.core.enums import AssetCriticality, AssetType, pg_enum
 
 if TYPE_CHECKING:
     from app.models.organization import Organization
@@ -31,12 +31,12 @@ class Asset(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     asset_type: Mapped[AssetType] = mapped_column(
-        Enum(AssetType, name="asset_type", native_enum=True),
+        pg_enum(AssetType, "asset_type"),
         nullable=False,
         index=True,
     )
     criticality: Mapped[AssetCriticality] = mapped_column(
-        Enum(AssetCriticality, name="asset_criticality", native_enum=True),
+        pg_enum(AssetCriticality, "asset_criticality"),
         default=AssetCriticality.MEDIUM,
         nullable=False,
     )
