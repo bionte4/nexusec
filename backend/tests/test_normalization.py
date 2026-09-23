@@ -95,6 +95,8 @@ def test_custom_parser_and_schema_fields() -> None:
     meta = f.compliance_metadata()
     assert "A.8.12" in meta["iso_27001"]
     assert meta["gdpr_risk_flag"] is True
+    assert meta["nist_csf"]
+    assert meta["nist_800_53"]
 
 
 def test_fingerprint_stable_and_asset_scoped() -> None:
@@ -131,3 +133,35 @@ def test_enrich_adds_defaults() -> None:
     assert enriched.pci_dss_requirement
     assert enriched.mitre_tactics
     assert enriched.remediation_steps
+    assert "PR.AA-01" in enriched.nist_csf or "ID.RA-01" in enriched.nist_csf
+    assert "RA-5" in enriched.nist_800_53 or "AC-2" in enriched.nist_800_53
+    meta = enriched.compliance_metadata()
+    assert meta["nist_csf"]
+    assert meta["nist_800_53"]
+
+
+def test_enrich_nist_tls_and_web_heuristics() -> None:
+    tls = enrich_compliance(
+        NormalizedFinding(
+            vuln_id="tls",
+            name="Weak TLS cipher suite",
+            description="Outdated certificate cipher",
+            source_tool="nuclei",
+            severity=Severity.MEDIUM,
+        )
+    )
+    assert "PR.DS-02" in tls.nist_csf
+    assert "SC-8" in tls.nist_800_53
+
+    web = enrich_compliance(
+        NormalizedFinding(
+            vuln_id="web",
+            name="SQL injection on login",
+            description="CVE-2024-0001 XSS/SQLi candidate",
+            source_tool="nuclei",
+            port=443,
+            severity=Severity.HIGH,
+        )
+    )
+    assert web.nist_csf
+    assert "RA-5" in web.nist_800_53

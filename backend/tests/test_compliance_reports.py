@@ -210,3 +210,37 @@ async def test_gdpr_filters_to_relevant_findings() -> None:
     assert len(report.findings) == 1
     assert report.findings[0].title == "PII exposure"
     assert any(b.control_id == "Art.32" for b in report.control_mapping)
+
+
+@pytest.mark.asyncio
+async def test_nist_csf_report_buckets() -> None:
+    asset = _asset()
+    vulns = [
+        _vuln(
+            asset,
+            title="Open SSH",
+            compliance={
+                "nist_csf": ["ID.RA-01", "PR.AA-01"],
+                "nist_800_53": ["RA-5", "AC-2"],
+            },
+        ),
+        _vuln(
+            asset,
+            title="Weak TLS",
+            severity=Severity.MEDIUM,
+            compliance={
+                "nist_csf": ["PR.DS-02"],
+                "nist_800_53": ["SC-8"],
+            },
+        ),
+    ]
+    service = _service_with_data(vulns, [asset])
+    report = await service.generate_nist_csf(_user())
+
+    assert report.metadata.report_type == "nist_csf"
+    assert "NIST" in report.metadata.standard
+    control_ids = {b.control_id for b in report.control_mapping}
+    assert "ID.RA-01" in control_ids
+    assert "PR.DS-02" in control_ids
+    assert len(report.findings) == 2
+    assert report.recommendations

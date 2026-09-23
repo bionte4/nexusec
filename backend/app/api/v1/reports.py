@@ -54,6 +54,18 @@ async def gdpr_report(
 
 
 @router.get(
+    "/nist-csf",
+    response_model=ComplianceReport,
+    summary="NIST CSF 2.0 / SP 800-53 vulnerability control mapping report",
+)
+async def nist_csf_report(
+    current_user: RequireSocOrAbove,
+    service: ComplianceReportService = Depends(get_report_service),
+) -> ComplianceReport:
+    return await service.generate_nist_csf(current_user)
+
+
+@router.get(
     "",
     summary="List available compliance report types",
 )
@@ -74,6 +86,11 @@ async def list_report_types(_: RequireSocOrAbove) -> dict[str, list[dict[str, st
                 "id": "gdpr",
                 "path": "/api/v1/reports/gdpr",
                 "standard": "GDPR Arts. 5/25/32/33",
+            },
+            {
+                "id": "nist_csf",
+                "path": "/api/v1/reports/nist-csf",
+                "standard": "NIST CSF 2.0 + SP 800-53 Rev.5",
             },
         ]
     }

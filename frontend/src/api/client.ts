@@ -292,8 +292,41 @@ export const api = {
     })
   },
 
-  getComplianceReport(kind: 'iso27001' | 'pci-dss' | 'gdpr') {
+  getComplianceReport(kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf') {
     return request<Record<string, unknown>>(`/api/v1/reports/${kind}`)
+  },
+
+  suggestNistControls(id: string, opts: { persist?: boolean; use_llm?: boolean } = {}) {
+    const q = new URLSearchParams()
+    if (opts.persist != null) q.set('persist', String(opts.persist))
+    if (opts.use_llm != null) q.set('use_llm', String(opts.use_llm))
+    const qs = q.toString()
+    return request<{
+      vulnerability_id: string
+      nist_csf: string[]
+      nist_800_53: string[]
+      reasoning: string
+      provider: string
+      model: string
+      status: string
+      current_compliance: { nist_csf: string[]; nist_800_53: string[] }
+    }>(`/api/v1/vulnerabilities/${id}/suggest-nist-controls${qs ? `?${qs}` : ''}`, {
+      method: 'POST',
+    })
+  },
+
+  acceptNistControls(
+    id: string,
+    payload: { nist_csf?: string[]; nist_800_53?: string[] } = {},
+  ) {
+    return request<{
+      vulnerability_id: string
+      status: string
+      compliance_metadata: Record<string, unknown>
+    }>(`/api/v1/vulnerabilities/${id}/accept-nist-controls`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
   },
 
   getScan(id: string) {

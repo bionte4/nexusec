@@ -24,11 +24,14 @@ from app.schemas.vulnerability import (
 )
 from app.services.ai_filter import AIFPAnalysisError
 from app.services.ai_remediation import AIRemediationError
+from app.services.nist_mapping_service import NISTMappingService
 from app.services.vulnerability_service import (
     VulnerabilityNotFoundError,
     VulnerabilityService,
     VulnerabilityValidationError,
 )
+from pydantic import BaseModel, Field
+from typing import Optional
 
 router = APIRouter(prefix="/vulnerabilities", tags=["vulnerabilities"])
 
@@ -205,6 +208,61 @@ async def analyze_false_positive(
     except VulnerabilityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AIFPAnalysisError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+class NISTAcceptPayload(BaseModel):
+    nist_csf: Optional[list[str]] = None
+    nist_800_53: Optional[list[str]] = None
+
+
+@router.post(
+    "/{vulnerability_id}/suggest-nist-controls",
+    summary="Suggest NIST CSF / 800-53 controls (heuristic or AI; pending review)",
+)
+async def suggest_nist_controls(
+    vulnerability_id: uuid.UUID,
+    tenant: RequireTenant,
+    _: RequireRemediationWriter,
+    persist: bool = Query(True),
+    use_llm: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    try:
+        return await NISTMappingService(db).suggest(
+            vulnerability_id,
+            organization_id=_org_scope(tenant),
+            persist=persist,
+            use_llm=use_llm,
+        )
+    except VulnerabilityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AIRemediationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{vulnerability_id}/accept-nist-controls",
+    summary="Accept pending NIST control suggestions into compliance_metadata",
+)
+async def accept_nist_controls(
+    vulnerability_id: uuid.UUID,
+    tenant: RequireTenant,
+    _: RequireRemediationWriter,
+    payload: NISTAcceptPayload | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    body = payload or NISTAcceptPayload()
+    try:
+        return await NISTMappingService(db).accept(
+            vulnerability_id,
+            organization_id=_org_scope(tenant),
+            nist_csf=body.nist_csf,
+            nist_800_53=body.nist_800_53,
+        )
+    except VulnerabilityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AIRemediationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 

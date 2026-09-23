@@ -356,7 +356,7 @@ export function VulnerabilitiesPage() {
     setNotice(t('vulns.csvExported', { count: filtered.length }))
   }
 
-  async function exportReport(kind: 'iso27001' | 'pci-dss' | 'gdpr') {
+  async function exportReport(kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf') {
     setBusy(true)
     setNotice(null)
     setError(null)
@@ -424,6 +424,14 @@ export function VulnerabilitiesPage() {
             className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
           >
             GDPR
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportReport('nist-csf')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            NIST
           </button>
         </div>
       </header>

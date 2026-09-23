@@ -33,6 +33,14 @@ class NormalizedFinding(BaseModel):
     iso_27001_clause: list[str] = Field(default_factory=list)
     pci_dss_requirement: list[str] = Field(default_factory=list)
     gdpr_risk_flag: bool = False
+    nist_csf: list[str] = Field(
+        default_factory=list,
+        description="NIST CSF 2.0 categories, e.g. ID.RA-01, PR.PS-02",
+    )
+    nist_800_53: list[str] = Field(
+        default_factory=list,
+        description="NIST SP 800-53 Rev.5 controls, e.g. RA-5, SI-2",
+    )
 
     # Location / taxonomy extras
     cve_id: Optional[str] = Field(default=None, max_length=32)
@@ -69,4 +77,6 @@ class NormalizedFinding(BaseModel):
             "pci_dss": list(self.pci_dss_requirement),
             "gdpr_risk_flag": self.gdpr_risk_flag,
             "gdpr": ["Art.32"] if self.gdpr_risk_flag else [],
+            "nist_csf": list(self.nist_csf),
+            "nist_800_53": list(self.nist_800_53),
         }

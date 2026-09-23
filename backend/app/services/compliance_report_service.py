@@ -47,6 +47,36 @@ _PCI_CONTROL_TITLES: dict[str, str] = {
     "3.4": "Protect stored account data",
 }
 
+_NIST_CSF_TITLES: dict[str, str] = {
+    "ID.RA-01": "Asset vulnerabilities are identified and recorded",
+    "ID.RA-02": "Cyber threat intelligence is received",
+    "PR.AA-01": "Identities and credentials are managed",
+    "PR.PS-01": "Configuration management practices are established",
+    "PR.PS-02": "Software is maintained and updated",
+    "PR.IR-01": "Networks and environments are protected",
+    "PR.DS-01": "Data-at-rest is protected",
+    "PR.DS-02": "Data-in-transit is protected",
+    "DE.CM-01": "Networks and network services are monitored",
+    "RS.MI-01": "Incidents are contained",
+}
+
+_NIST_800_53_TITLES: dict[str, str] = {
+    "RA-5": "Vulnerability Monitoring and Scanning",
+    "SI-2": "Flaw Remediation",
+    "SI-4": "System Monitoring",
+    "SI-10": "Information Input Validation",
+    "CM-6": "Configuration Settings",
+    "CM-7": "Least Functionality",
+    "AC-2": "Account Management",
+    "AC-3": "Access Enforcement",
+    "IA-2": "Identification and Authentication",
+    "SC-7": "Boundary Protection",
+    "SC-8": "Transmission Confidentiality and Integrity",
+    "SC-12": "Cryptographic Key Establishment and Management",
+    "SC-13": "Cryptographic Protection",
+    "MP-6": "Media Sanitization",
+}
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -347,6 +377,81 @@ class ComplianceReportService:
                 "Contain and remediate High/Critical PII exposure paths immediately.",
                 "Assess breach notification obligations under Art.33 if exploitation is plausible.",
                 "Align residual risks with DPIA / Art.32 documentation.",
+            ],
+        )
+
+    async def generate_nist_csf(self, auditor: User) -> ComplianceReport:
+        """NIST CSF 2.0 categories + linked SP 800-53 Rev.5 controls."""
+        vulns, assets = await self._load_scope()
+        csf_rows = self._to_rows(vulns, control_keys=("nist_csf",))
+        # Enrich control list with 800-53 for display when CSF empty but 800-53 present
+        for row, vuln in zip(csf_rows, vulns):
+            meta = vuln.compliance_metadata or {}
+            if not row.controls:
+                row.controls = _extract_controls(meta, "nist_800_53") or ["ID.RA-01"]
+
+        buckets = self._bucket_by_control(
+            csf_rows,
+            titles={**_NIST_CSF_TITLES, **_NIST_800_53_TITLES},
+            default_control="ID.RA-01",
+            default_title=_NIST_CSF_TITLES["ID.RA-01"],
+        )
+        active = [r for r in csf_rows if r.status in ACTIVE_FINDING_STATUSES]
+        sp_rows = self._to_rows(vulns, control_keys=("nist_800_53",))
+        sp_active = [r for r in sp_rows if r.controls and r.status in ACTIVE_FINDING_STATUSES]
+
+        meta = self._metadata(
+            auditor,
+            report_type="nist_csf",
+            title="NIST CSF 2.0 / SP 800-53 — Vulnerability Control Mapping Report",
+            standard="NIST Cybersecurity Framework 2.0 + SP 800-53 Rev.5",
+            assets=assets,
+            active_count=len(active),
+            scope_notes=(
+                "Findings mapped to NIST CSF categories (ID/PR/DE/RS) with related "
+                "SP 800-53 technical controls (RA-5, SI-2, etc.)."
+            ),
+        )
+        sections = [
+            ReportSection(
+                heading="Executive overview",
+                summary=(
+                    f"Mapped {len(csf_rows)} findings across {len(buckets)} NIST controls. "
+                    f"{len(active)} remain active; {len(sp_active)} carry explicit 800-53 tags."
+                ),
+                metrics={
+                    "total_findings": len(csf_rows),
+                    "active_findings": len(active),
+                    "control_buckets": len(buckets),
+                    "severity_summary": _severity_summary(active),
+                },
+            ),
+            ReportSection(
+                heading="CSF / 800-53 posture",
+                summary="Control coverage derived from scanner normalization heuristics.",
+                metrics={
+                    "csf_controls": sorted({c for r in csf_rows for c in r.controls}),
+                    "sp80053_controls": sorted(
+                        {c for r in sp_rows for c in r.controls}
+                    ),
+                },
+                narrative=(
+                    "Use this report to align VA findings with Govern/Identify/Protect/"
+                    "Detect/Respond outcomes. AI-suggested mappings remain pending until "
+                    "an analyst accepts them."
+                ),
+            ),
+        ]
+        return ComplianceReport(
+            metadata=meta,
+            executive_summary=sections[0].summary,
+            sections=sections,
+            control_mapping=buckets,
+            findings=csf_rows,
+            recommendations=[
+                "Prioritize Critical/High findings under ID.RA-01 / RA-5 for continuous monitoring.",
+                "Track flaw remediation (SI-2 / PR.PS-02) to closure with re-scan evidence.",
+                "Review AI-suggested NIST mappings before accepting into compliance_metadata.",
             ],
         )
 
