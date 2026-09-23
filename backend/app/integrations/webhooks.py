@@ -85,6 +85,51 @@ def build_generic_payload(finding: dict[str, Any]) -> dict[str, Any]:
     return {"event": "vulnerability.alert", "finding": finding}
 
 
+def mask_webhook_url(url: str) -> str:
+    raw = (url or "").strip()
+    if len(raw) < 16:
+        return "***"
+    # Keep scheme + host, mask the rest
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(raw)
+        host = parsed.netloc or "****"
+        return f"{parsed.scheme}://{host}/***"
+    except Exception:
+        return raw[:12] + "***"
+
+
+def resolve_webhook_config(org_settings: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Merge org.settings.integrations.webhook over env defaults."""
+    settings = get_settings()
+    cfg: dict[str, Any] = {
+        "enabled": settings.webhook_enabled,
+        "provider": settings.webhook_provider,
+        "min_severity": settings.webhook_min_severity,
+        "urls": list(settings.webhook_url_list),
+        "source": "env",
+    }
+    if not org_settings:
+        return cfg
+    integ = org_settings.get("integrations") if isinstance(org_settings, dict) else None
+    wh = integ.get("webhook") if isinstance(integ, dict) else None
+    if not isinstance(wh, dict):
+        return cfg
+    if "enabled" in wh:
+        cfg["enabled"] = bool(wh["enabled"])
+    if wh.get("provider"):
+        cfg["provider"] = str(wh["provider"]).lower()
+    if wh.get("min_severity"):
+        cfg["min_severity"] = str(wh["min_severity"]).lower()
+    if isinstance(wh.get("urls"), list) and wh["urls"]:
+        cfg["urls"] = [str(u).strip() for u in wh["urls"] if str(u).strip()]
+        cfg["source"] = "organization"
+    elif any(k in wh for k in ("enabled", "provider", "min_severity")):
+        cfg["source"] = "organization+env"
+    return cfg
+
+
 class WebhookNotifier:
     """POST finding alerts to configured webhook URLs."""
 
@@ -96,12 +141,13 @@ class WebhookNotifier:
         min_severity: Optional[str] = None,
         enabled: Optional[bool] = None,
         timeout_seconds: float = 10.0,
+        org_settings: Optional[dict[str, Any]] = None,
     ) -> None:
-        settings = get_settings()
-        self.urls = urls if urls is not None else settings.webhook_url_list
-        self.provider = (provider or settings.webhook_provider).lower()
-        self.min_severity = (min_severity or settings.webhook_min_severity).lower()
-        self.enabled = settings.webhook_enabled if enabled is None else enabled
+        resolved = resolve_webhook_config(org_settings)
+        self.urls = urls if urls is not None else list(resolved["urls"])
+        self.provider = (provider or resolved["provider"]).lower()
+        self.min_severity = (min_severity or resolved["min_severity"]).lower()
+        self.enabled = resolved["enabled"] if enabled is None else enabled
         self.timeout_seconds = timeout_seconds
 
     def should_alert(self, severity: Severity | str) -> bool:

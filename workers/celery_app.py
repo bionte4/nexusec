@@ -27,6 +27,7 @@ celery_app = Celery(
         "workers.integration_tasks",
         "workers.threat_intel_tasks",
         "workers.observability_tasks",
+        "workers.schedule_tasks",
     ],
 )
 
@@ -52,6 +53,7 @@ celery_app.conf.update(
         "integrations.*": {"queue": "integrations"},
         "threat_intel.*": {"queue": "default"},
         "observability.*": {"queue": "default"},
+        "schedules.*": {"queue": "default"},
     },
     beat_schedule=(
         {
@@ -68,11 +70,19 @@ celery_app.conf.update(
                 "task": "observability.heartbeat",
                 "schedule": 60.0,
             },
+            "scan-schedules-dispatch": {
+                "task": "schedules.dispatch_due",
+                "schedule": 60.0,
+            },
         }
         if settings.threat_intel_sync_enabled
         else {
             "observability-heartbeat": {
                 "task": "observability.heartbeat",
+                "schedule": 60.0,
+            },
+            "scan-schedules-dispatch": {
+                "task": "schedules.dispatch_due",
                 "schedule": 60.0,
             },
         }

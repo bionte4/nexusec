@@ -16,6 +16,7 @@ from app.core.enums import AssetCriticality, AssetType, pg_enum
 if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.scan import Scan
+    from app.models.scan_schedule import ScanSchedule
     from app.models.vulnerability import Vulnerability
 
 
@@ -75,6 +76,9 @@ class Asset(Base):
     organization: Mapped[Organization] = relationship("Organization", back_populates="assets")
     scans: Mapped[list[Scan]] = relationship(
         "Scan", secondary="scan_assets", back_populates="assets"
+    )
+    scan_schedules: Mapped[list["ScanSchedule"]] = relationship(
+        "ScanSchedule", secondary="scan_schedule_assets", back_populates="assets"
     )
     vulnerabilities: Mapped[list[Vulnerability]] = relationship(
         "Vulnerability", back_populates="asset"

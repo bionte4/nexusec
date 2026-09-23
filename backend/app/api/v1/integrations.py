@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
 from app.core.database import get_db
-from app.core.deps import RequireAdmin, RequirePentesterOrAdmin
+from app.core.deps import RequireAdmin, RequirePentesterOrAdmin, RequireTenant
 from app.core.enums import FindingStatus, Severity
 from app.integrations import build_finding_event, dispatch_integrations
 from app.integrations.siem import to_cef, to_json_syslog
@@ -22,7 +22,10 @@ from app.integrations.webhooks import (
     build_generic_payload,
     build_slack_payload,
     build_teams_payload,
+    mask_webhook_url,
+    resolve_webhook_config,
 )
+from app.models.organization import Organization
 from app.models.vulnerability import Vulnerability
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -50,29 +53,137 @@ class PreviewFinding(BaseModel):
     description: Optional[str] = "Preview payload for integrations"
 
 
+class WebhookSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    provider: Optional[str] = Field(default=None, pattern="^(generic|slack|teams)$")
+    min_severity: Optional[str] = Field(default=None, pattern="^(critical|high|medium|low|info)$")
+    urls: Optional[list[str]] = None
+
+
+def _org_scope(tenant: RequireTenant) -> uuid.UUID | None:
+    return None if tenant.cross_tenant else tenant.organization_id
+
+
 @router.get("/status", summary="Integration configuration status (no secrets)")
-async def integration_status(_: RequireAdmin) -> dict[str, Any]:
+async def integration_status(
+    tenant: RequireTenant,
+    _: RequireAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
     from app.core.config import get_settings
 
     s = get_settings()
+    org_settings = None
+    if tenant.organization_id is not None:
+        org = (
+            await db.execute(
+                select(Organization).where(Organization.id == tenant.organization_id)
+            )
+        ).scalar_one_or_none()
+        if org is not None:
+            org_settings = org.settings
+
+    webhook = resolve_webhook_config(org_settings)
     return {
         "webhook": {
-            "enabled": s.webhook_enabled,
-            "provider": s.webhook_provider,
-            "endpoints_configured": len(s.webhook_url_list),
-            "min_severity": s.webhook_min_severity,
+            "enabled": webhook["enabled"],
+            "provider": webhook["provider"],
+            "endpoints_configured": len(webhook["urls"]),
+            "urls_masked": [mask_webhook_url(u) for u in webhook["urls"]],
+            "min_severity": webhook["min_severity"],
+            "source": webhook["source"],
         },
         "ticketing": {
             "enabled": s.ticket_enabled,
             "provider": s.ticket_provider,
             "jira_configured": bool(s.jira_base_url and s.jira_api_token),
-            "servicenow_configured": bool(s.servicenow_instance_url and s.servicenow_username),
+            "servicenow_configured": bool(
+                s.servicenow_instance_url and s.servicenow_username
+            ),
         },
         "siem": {
             "enabled": s.siem_enabled,
             "format": s.siem_format,
             "collector_configured": bool(s.siem_webhook_url),
         },
+    }
+
+
+@router.get(
+    "/webhook-settings",
+    summary="Get tenant webhook settings (URLs masked)",
+)
+async def get_webhook_settings(
+    tenant: RequireTenant,
+    _: RequireAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    org = (
+        await db.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    webhook = resolve_webhook_config(org.settings)
+    return {
+        "enabled": webhook["enabled"],
+        "provider": webhook["provider"],
+        "min_severity": webhook["min_severity"],
+        "urls_masked": [mask_webhook_url(u) for u in webhook["urls"]],
+        "endpoints_configured": len(webhook["urls"]),
+        "source": webhook["source"],
+    }
+
+
+@router.patch(
+    "/webhook-settings",
+    summary="Update tenant webhook settings (stored in organization.settings)",
+)
+async def patch_webhook_settings(
+    payload: WebhookSettingsUpdate,
+    tenant: RequireTenant,
+    _: RequireAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    org = (
+        await db.execute(select(Organization).where(Organization.id == org_id))
+    ).scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    settings = dict(org.settings or {})
+    integ = dict(settings.get("integrations") or {})
+    wh = dict(integ.get("webhook") or {})
+    data = payload.model_dump(exclude_unset=True)
+    if "urls" in data and data["urls"] is not None:
+        cleaned = []
+        for u in data["urls"]:
+            u = str(u).strip()
+            if not u:
+                continue
+            if not (u.startswith("https://") or u.startswith("http://")):
+                raise HTTPException(
+                    status_code=400, detail="Webhook URLs must be http(s)"
+                )
+            cleaned.append(u)
+        wh["urls"] = cleaned
+        data.pop("urls")
+    wh.update(data)
+    integ["webhook"] = wh
+    settings["integrations"] = integ
+    org.settings = settings
+    await db.flush()
+    await db.refresh(org)
+
+    webhook = resolve_webhook_config(org.settings)
+    return {
+        "enabled": webhook["enabled"],
+        "provider": webhook["provider"],
+        "min_severity": webhook["min_severity"],
+        "urls_masked": [mask_webhook_url(u) for u in webhook["urls"]],
+        "endpoints_configured": len(webhook["urls"]),
+        "source": webhook["source"],
     }
 
 

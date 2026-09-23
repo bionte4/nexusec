@@ -44,7 +44,10 @@ def dispatch_finding_integrations(
     with session_scope() as session:
         vuln = (
             session.query(Vulnerability)
-            .options(selectinload(Vulnerability.asset))
+            .options(
+                selectinload(Vulnerability.asset),
+                selectinload(Vulnerability.organization),
+            )
             .filter(Vulnerability.id == vuln_uuid)
             .one_or_none()
         )
@@ -65,12 +68,16 @@ def dispatch_finding_integrations(
             source_tool=vuln.source_tool,
             description=vuln.description,
         )
+        org_settings = None
+        if vuln.organization is not None:
+            org_settings = vuln.organization.settings
         result = dispatch_integrations(
             event,
             existing_ticket_key=vuln.external_ticket_key,
             send_webhook=send_webhook,
             sync_ticket=sync_ticket,
             forward_siem=forward_siem,
+            org_settings=org_settings,
         )
 
         ticket = result.get("ticket") or {}

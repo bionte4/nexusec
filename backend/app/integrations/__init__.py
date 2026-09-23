@@ -48,6 +48,7 @@ def dispatch_integrations(
     send_webhook: bool = True,
     sync_ticket: bool = True,
     forward_siem: bool = True,
+    org_settings: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Synchronous dispatch used by Celery workers / API dry-runs.
@@ -59,7 +60,7 @@ def dispatch_integrations(
     result: dict[str, Any] = {"finding_id": finding.get("vulnerability_id")}
 
     if send_webhook:
-        result["webhook"] = WebhookNotifier().send(finding)
+        result["webhook"] = WebhookNotifier(org_settings=org_settings).send(finding)
 
     ticket: Optional[TicketResult] = None
     if sync_ticket:

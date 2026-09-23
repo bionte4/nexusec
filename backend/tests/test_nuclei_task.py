@@ -45,6 +45,7 @@ def test_nuclei_wrapper_build_argv_allowlists() -> None:
     assert argv[0] == "nuclei"
     assert "-jsonl" in argv
     assert "-duc" in argv
+    assert argv[argv.index("-t") + 1] == "/opt/nuclei-templates/http"
     assert argv[argv.index("-severity") + 1] == "high,critical"
     assert argv[argv.index("-tags") + 1] == "cve"
     assert argv[argv.index("-u") + 1] == "https://example.com"

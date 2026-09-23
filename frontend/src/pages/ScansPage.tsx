@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Play, Plus, Radar, RefreshCw } from 'lucide-react'
+import { CalendarClock, Play, Plus, Radar, RefreshCw, Trash2 } from 'lucide-react'
 import {
   api,
   ApiError,
@@ -11,11 +11,13 @@ import type {
   Asset,
   Organization,
   Scan,
+  ScanSchedule,
   ScannerEngine,
   ScanStatus,
   ScanType,
 } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
+import { ScanExtras } from '../components/ScanExtras'
 import { useLocale } from '../i18n/locale'
 
 const ENGINES: { id: ScannerEngine; ready: boolean }[] = [
@@ -26,6 +28,12 @@ const ENGINES: { id: ScannerEngine; ready: boolean }[] = [
   { id: 'other', ready: false },
 ]
 const SCAN_TYPES: ScanType[] = ['discovery', 'va', 'pt', 'compliance', 'custom']
+const INTERVALS = [
+  { minutes: 60, key: 'scans.intervalHourly' as const },
+  { minutes: 360, key: 'scans.interval6h' as const },
+  { minutes: 1440, key: 'scans.intervalDaily' as const },
+  { minutes: 10080, key: 'scans.intervalWeekly' as const },
+]
 
 function statusClass(s: ScanStatus): string {
   switch (s) {
@@ -43,6 +51,14 @@ function statusClass(s: ScanStatus): string {
   }
 }
 
+function intervalLabel(
+  minutes: number,
+  t: (key: (typeof INTERVALS)[number]['key']) => string,
+): string {
+  const hit = INTERVALS.find((i) => i.minutes === minutes)
+  return hit ? t(hit.key) : `${minutes}m`
+}
+
 export function ScansPage() {
   const { usingMock, token, user } = useAuth()
   const { t } = useLocale()
@@ -52,8 +68,10 @@ export function ScansPage() {
     user?.role === 'pentester'
 
   const [items, setItems] = useState<Scan[]>([])
+  const [schedules, setSchedules] = useState<ScanSchedule[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
   const [total, setTotal] = useState(0)
+  const [scheduleTotal, setScheduleTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -67,6 +85,17 @@ export function ScansPage() {
     engine: 'nmap' as ScannerEngine,
     asset_id: '',
     start_immediately: true,
+    config: {} as Record<string, unknown>,
+  })
+
+  const [scheduleForm, setScheduleForm] = useState({
+    name: '',
+    scan_type: 'discovery' as ScanType,
+    engine: 'nmap' as ScannerEngine,
+    asset_id: '',
+    interval_minutes: 1440,
+    enabled: true,
+    run_immediately: false,
     config: {} as Record<string, unknown>,
   })
 
@@ -106,6 +135,40 @@ export function ScansPage() {
     }))
   }
 
+  function applySchedulePreset(preset: PresetId) {
+    if (preset === 'discovery_nmap') {
+      setScheduleForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetDiscoveryName'),
+        scan_type: 'discovery',
+        engine: 'nmap',
+        config: {},
+      }))
+      return
+    }
+    if (preset === 'va_nuclei') {
+      setScheduleForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetNucleiName'),
+        scan_type: 'va',
+        engine: 'nuclei',
+        config: {
+          severity: ['critical', 'high', 'medium'],
+          tags: ['cve', 'misconfig', 'vuln'],
+          exclude_tags: ['dos'],
+        },
+      }))
+      return
+    }
+    setScheduleForm((f) => ({
+      ...f,
+      name: f.name || t('scans.presetNexusecName'),
+      scan_type: 'va',
+      engine: 'nexusec',
+      config: {},
+    }))
+  }
+
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (usingMock || token === 'demo') {
       setLoading(false)
@@ -128,14 +191,22 @@ export function ScansPage() {
           setSelectedOrg(current)
         }
       }
-      const [scanRes, assetRes] = await Promise.all([
+      const [scanRes, assetRes, scheduleRes] = await Promise.all([
         api.listScans({ page: 1, page_size: 50 }),
         api.listAssets({ page: 1, page_size: 100 }),
+        api.listScanSchedules({ page: 1, page_size: 50 }),
       ])
       setItems(scanRes.items)
       setTotal(scanRes.total)
+      setSchedules(scheduleRes.items)
+      setScheduleTotal(scheduleRes.total)
       setAssets(assetRes.items)
       setForm((f) =>
+        f.asset_id || !assetRes.items[0]
+          ? f
+          : { ...f, asset_id: assetRes.items[0].id },
+      )
+      setScheduleForm((f) =>
         f.asset_id || !assetRes.items[0]
           ? f
           : { ...f, asset_id: assetRes.items[0].id },
@@ -145,6 +216,8 @@ export function ScansPage() {
         setError(err instanceof ApiError ? err.message : t('scans.loadFailed'))
         setItems([])
         setTotal(0)
+        setSchedules([])
+        setScheduleTotal(0)
       }
     } finally {
       if (!opts?.silent) setLoading(false)
@@ -174,6 +247,7 @@ export function ScansPage() {
     setSelectedOrg(orgId)
     setOrganizationId(orgId || null)
     setForm((f) => ({ ...f, asset_id: '' }))
+    setScheduleForm((f) => ({ ...f, asset_id: '' }))
     void load()
   }
 
@@ -200,6 +274,77 @@ export function ScansPage() {
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('scans.createFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onCreateSchedule(e: FormEvent) {
+    e.preventDefault()
+    if (!canWrite || !scheduleForm.asset_id) return
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (user?.role === 'super_admin' && selectedOrg) {
+        setOrganizationId(selectedOrg)
+      }
+      const created = await api.createScanSchedule({
+        name: scheduleForm.name.trim(),
+        scan_type: scheduleForm.scan_type,
+        engine: scheduleForm.engine,
+        asset_ids: [scheduleForm.asset_id],
+        config: scheduleForm.config,
+        interval_minutes: scheduleForm.interval_minutes,
+        enabled: scheduleForm.enabled,
+        run_immediately: scheduleForm.run_immediately,
+      })
+      setNotice(t('scans.scheduleCreated', { name: created.name }))
+      setScheduleForm((f) => ({
+        ...f,
+        name: '',
+        config: {},
+        run_immediately: false,
+      }))
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('scans.scheduleFailed'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onToggleSchedule(schedule: ScanSchedule) {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      await api.updateScanSchedule(schedule.id, { enabled: !schedule.enabled })
+      setNotice(t('scans.scheduleUpdated'))
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('scans.scheduleToggleFailed'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onDeleteSchedule(id: string) {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      await api.deleteScanSchedule(id)
+      setNotice(t('scans.scheduleDeleted'))
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('scans.scheduleDeleteFailed'),
+      )
     } finally {
       setBusy(false)
     }
@@ -360,9 +505,9 @@ export function ScansPage() {
                 }
                 className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
               >
-                {SCAN_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {SCAN_TYPES.map((st) => (
+                  <option key={st} value={st}>
+                    {st}
                   </option>
                 ))}
               </select>
@@ -458,12 +603,253 @@ export function ScansPage() {
                       ? ` → ${new Date(s.completed_at).toLocaleString()}`
                       : ''}
                   </div>
+                  <ScanExtras
+                    scanId={s.id}
+                    engine={s.engine}
+                    status={s.status}
+                    canWrite={canWrite}
+                    busy={busy}
+                    onNotice={setNotice}
+                    onError={setError}
+                    onAssetsChanged={() => void load()}
+                  />
                 </li>
               ))}
             </ul>
           )}
         </div>
       </div>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+            <CalendarClock className="h-5 w-5 text-accent" />
+            {t('scans.schedulesTitle')}
+          </h2>
+          <p className="mt-1 text-sm text-surface-400">
+            {t('scans.schedulesSubtitle', { count: scheduleTotal })}
+          </p>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {canWrite ? (
+            <form
+              onSubmit={onCreateSchedule}
+              className="panel space-y-3 rounded-xl p-5 lg:col-span-1"
+            >
+              <h3 className="text-sm font-medium">{t('scans.newSchedule')}</h3>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => applySchedulePreset('discovery_nmap')}
+                  className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  {t('scans.presetDiscovery')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySchedulePreset('va_nuclei')}
+                  className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  {t('scans.presetNuclei')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySchedulePreset('va_nexusec')}
+                  className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  {t('scans.presetNexusec')}
+                </button>
+              </div>
+              <input
+                required
+                value={scheduleForm.name}
+                onChange={(e) =>
+                  setScheduleForm({ ...scheduleForm, name: e.target.value })
+                }
+                placeholder={t('scans.scanName')}
+                className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+              />
+              <select
+                value={scheduleForm.asset_id}
+                onChange={(e) =>
+                  setScheduleForm({ ...scheduleForm, asset_id: e.target.value })
+                }
+                required
+                className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option value="">{t('scans.selectAsset')}</option>
+                {assets.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.asset_type})
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={scheduleForm.engine}
+                  onChange={(e) =>
+                    setScheduleForm({
+                      ...scheduleForm,
+                      engine: e.target.value as ScannerEngine,
+                    })
+                  }
+                  className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  {ENGINES.filter((e) => e.ready).map((eng) => (
+                    <option key={eng.id} value={eng.id}>
+                      {eng.id}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={scheduleForm.interval_minutes}
+                  onChange={(e) =>
+                    setScheduleForm({
+                      ...scheduleForm,
+                      interval_minutes: Number(e.target.value),
+                    })
+                  }
+                  className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  {INTERVALS.map((iv) => (
+                    <option key={iv.minutes} value={iv.minutes}>
+                      {t(iv.key)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-surface-300">
+                <input
+                  type="checkbox"
+                  checked={scheduleForm.enabled}
+                  onChange={(e) =>
+                    setScheduleForm({
+                      ...scheduleForm,
+                      enabled: e.target.checked,
+                    })
+                  }
+                />
+                {t('scans.enabled')}
+              </label>
+              <label className="flex items-center gap-2 text-xs text-surface-300">
+                <input
+                  type="checkbox"
+                  checked={scheduleForm.run_immediately}
+                  onChange={(e) =>
+                    setScheduleForm({
+                      ...scheduleForm,
+                      run_immediately: e.target.checked,
+                    })
+                  }
+                />
+                {t('scans.runImmediately')}
+              </label>
+              <button
+                type="submit"
+                disabled={
+                  busy || !scheduleForm.name.trim() || !scheduleForm.asset_id
+                }
+                className="w-full rounded-lg border border-accent/50 bg-accent/15 px-3 py-2 text-sm font-semibold text-accent transition hover:bg-accent/25 disabled:opacity-50"
+              >
+                {t('scans.createSchedule')}
+              </button>
+            </form>
+          ) : (
+            <div className="panel rounded-xl p-5 text-sm text-surface-400 lg:col-span-1">
+              {t('scans.viewOnlyHint')}
+            </div>
+          )}
+
+          <div className="space-y-2 lg:col-span-2">
+            {schedules.length === 0 ? (
+              <p className="panel rounded-xl py-10 text-center text-sm text-surface-400">
+                {t('scans.noSchedules')}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {schedules.map((s) => (
+                  <li
+                    key={s.id}
+                    className="panel space-y-2 rounded-xl px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-surface-100">
+                          {s.name}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[11px] text-surface-400">
+                          {s.engine} · {intervalLabel(s.interval_minutes, t)}
+                          {s.asset_ids[0]
+                            ? ` · ${assetName(s.asset_ids[0])}`
+                            : ''}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`rounded-md px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                            s.enabled
+                              ? 'bg-ok/15 text-ok'
+                              : 'bg-surface-700 text-surface-400'
+                          }`}
+                        >
+                          {s.enabled ? t('scans.enabled') : t('scans.pause')}
+                        </span>
+                        {canWrite ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void onToggleSchedule(s)}
+                              className="rounded-md border border-surface-600 px-2 py-1 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+                            >
+                              {s.enabled
+                                ? t('scans.pause')
+                                : t('scans.resume')}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void onDeleteSchedule(s.id)}
+                              className="inline-flex items-center gap-1 rounded-md border border-danger/40 px-2 py-1 text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              {t('scans.delete')}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="font-mono text-[10px] text-surface-500">
+                      {t('scans.nextRun')}:{' '}
+                      {new Date(s.next_run_at).toLocaleString()}
+                      {s.last_run_at
+                        ? ` · ${t('scans.lastRun')}: ${new Date(s.last_run_at).toLocaleString()}`
+                        : ''}
+                      {s.last_scan_id ? (
+                        <>
+                          {' · '}
+                          <Link
+                            to={`/vulnerabilities?scan_id=${s.last_scan_id}`}
+                            className="text-accent hover:underline"
+                          >
+                            {t('common.findings')}
+                          </Link>
+                        </>
+                      ) : null}
+                    </div>
+                    {s.last_error ? (
+                      <p className="font-mono text-[11px] text-danger">
+                        {s.last_error}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

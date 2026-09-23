@@ -13,7 +13,11 @@ import type {
   ScanCreatePayload,
   ScanEnqueueResponse,
   ScanListResponse,
+  ScanSchedule,
+  ScanScheduleCreatePayload,
+  ScanScheduleListResponse,
   SocChatResponse,
+  Scan,
   UserListResponse,
   VulnListParams,
   Vulnerability,
@@ -290,5 +294,157 @@ export const api = {
 
   getComplianceReport(kind: 'iso27001' | 'pci-dss' | 'gdpr') {
     return request<Record<string, unknown>>(`/api/v1/reports/${kind}`)
+  },
+
+  getScan(id: string) {
+    return request<Scan>(`/api/v1/scans/${id}`)
+  },
+
+  getScanEvidence(id: string) {
+    return request<{
+      scan_id: string
+      status: string
+      progress: number
+      error_message: string | null
+      engine: string
+      command?: string[]
+      returncode?: number
+      truncated?: boolean
+      finished_at?: string
+      ingest?: Record<string, unknown>
+      stderr: string
+      stdout_preview: string
+      stdout_truncated: boolean
+      stdout_chars: number
+    }>(`/api/v1/scans/${id}/evidence`)
+  },
+
+  getScanDiff(id: string, baselineScanId?: string) {
+    const q = baselineScanId
+      ? `?baseline_scan_id=${encodeURIComponent(baselineScanId)}`
+      : ''
+    return request<{
+      scan_id: string
+      baseline_scan_id: string
+      engine: string
+      method: string
+      new: Array<Record<string, unknown>>
+      resolved: Array<Record<string, unknown>>
+      unchanged_count: number
+      counts: { new: number; resolved: number; unchanged: number }
+    }>(`/api/v1/scans/${id}/diff${q}`)
+  },
+
+  getDiscoveredHosts(scanId: string) {
+    return request<{
+      scan_id: string
+      total: number
+      new_count: number
+      hosts: Array<{
+        ip_address: string | null
+        hostname: string | null
+        already_known: boolean
+        matched_asset_id: string | null
+        suggested_asset: Record<string, unknown>
+        open_ports: Array<Record<string, unknown>>
+      }>
+    }>(`/api/v1/scans/${scanId}/discovered-hosts`)
+  },
+
+  acceptDiscoveredHosts(
+    scanId: string,
+    hosts: Array<{
+      ip_address?: string | null
+      hostname?: string | null
+      name?: string
+      criticality?: string
+    }>,
+  ) {
+    return request<{
+      created_count: number
+      skipped_count: number
+      created: unknown[]
+      skipped: unknown[]
+    }>(`/api/v1/scans/${scanId}/discovered-hosts/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ hosts }),
+    })
+  },
+
+  getIntegrationsStatus() {
+    return request<{
+      webhook: {
+        enabled: boolean
+        provider: string
+        endpoints_configured: number
+        urls_masked?: string[]
+        min_severity: string
+        source?: string
+      }
+      ticketing: Record<string, unknown>
+      siem: Record<string, unknown>
+    }>('/api/v1/integrations/status')
+  },
+
+  getWebhookSettings() {
+    return request<{
+      enabled: boolean
+      provider: string
+      min_severity: string
+      urls_masked: string[]
+      endpoints_configured: number
+      source: string
+    }>('/api/v1/integrations/webhook-settings')
+  },
+
+  updateWebhookSettings(payload: {
+    enabled?: boolean
+    provider?: string
+    min_severity?: string
+    urls?: string[]
+  }) {
+    return request<{
+      enabled: boolean
+      provider: string
+      min_severity: string
+      urls_masked: string[]
+      endpoints_configured: number
+      source: string
+    }>('/api/v1/integrations/webhook-settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  listScanSchedules(params: { page?: number; page_size?: number; enabled?: boolean } = {}) {
+    const q = new URLSearchParams()
+    if (params.page) q.set('page', String(params.page))
+    if (params.page_size) q.set('page_size', String(params.page_size))
+    if (params.enabled != null) q.set('enabled', String(params.enabled))
+    const qs = q.toString()
+    return request<ScanScheduleListResponse>(
+      `/api/v1/scan-schedules${qs ? `?${qs}` : ''}`,
+    )
+  },
+
+  createScanSchedule(payload: ScanScheduleCreatePayload) {
+    return request<ScanSchedule>('/api/v1/scan-schedules', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  updateScanSchedule(
+    id: string,
+    payload: Partial<ScanScheduleCreatePayload> & { enabled?: boolean },
+  ) {
+    return request<ScanSchedule>(`/api/v1/scan-schedules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  deleteScanSchedule(id: string) {
+    return request<void>(`/api/v1/scan-schedules/${id}`, { method: 'DELETE' })
   },
 }

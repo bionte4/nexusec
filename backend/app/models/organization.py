@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from app.models.asset import Asset
     from app.models.audit_log import AuditLog
     from app.models.scan import Scan
+    from app.models.scan_schedule import ScanSchedule
     from app.models.user import User
     from app.models.vulnerability import Vulnerability
 
@@ -47,6 +48,9 @@ class Organization(Base):
     users: Mapped[list[User]] = relationship("User", back_populates="organization")
     assets: Mapped[list[Asset]] = relationship("Asset", back_populates="organization")
     scans: Mapped[list[Scan]] = relationship("Scan", back_populates="organization")
+    scan_schedules: Mapped[list[ScanSchedule]] = relationship(
+        "ScanSchedule", back_populates="organization"
+    )
     vulnerabilities: Mapped[list[Vulnerability]] = relationship(
         "Vulnerability", back_populates="organization"
     )

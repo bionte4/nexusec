@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
+  Bell,
   Building2,
   HeartPulse,
   Shield,
@@ -15,7 +16,7 @@ import type {
 import { useAuth } from '../auth/AuthContext'
 import { useLocale } from '../i18n/locale'
 
-type Tab = 'overview' | 'users' | 'organizations' | 'system'
+type Tab = 'overview' | 'users' | 'organizations' | 'system' | 'alerts'
 
 function roleLabel(role: string): string {
   return role.replaceAll('_', ' ')
@@ -43,6 +44,24 @@ export function AdminPage() {
   const [newOrg, setNewOrg] = useState({ name: '', slug: '', description: '' })
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [integrations, setIntegrations] = useState<{
+    webhook: {
+      enabled: boolean
+      provider: string
+      endpoints_configured: number
+      urls_masked?: string[]
+      min_severity: string
+      source?: string
+    }
+    ticketing: Record<string, unknown>
+    siem: Record<string, unknown>
+  } | null>(null)
+  const [webhookForm, setWebhookForm] = useState({
+    enabled: false,
+    provider: 'generic',
+    min_severity: 'high',
+    urlsText: '',
+  })
 
   const load = useCallback(async () => {
     if (usingMock || token === 'demo') {
@@ -85,6 +104,27 @@ export function AdminPage() {
         ])
         setHealth(h)
         setWorkers(w)
+      }
+
+      if (tab === 'alerts') {
+        const status = await api.getIntegrationsStatus()
+        setIntegrations(status)
+        const settings = await api.getWebhookSettings().catch(() => null)
+        if (settings) {
+          setWebhookForm({
+            enabled: settings.enabled,
+            provider: settings.provider,
+            min_severity: settings.min_severity,
+            urlsText: '',
+          })
+        } else {
+          setWebhookForm({
+            enabled: status.webhook.enabled,
+            provider: status.webhook.provider,
+            min_severity: status.webhook.min_severity,
+            urlsText: '',
+          })
+        }
       }
     } catch (err) {
       setError(
@@ -147,6 +187,40 @@ export function AdminPage() {
     }
   }
 
+  async function onSaveWebhook(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      const payload: {
+        enabled: boolean
+        provider: string
+        min_severity: string
+        urls?: string[]
+      } = {
+        enabled: webhookForm.enabled,
+        provider: webhookForm.provider,
+        min_severity: webhookForm.min_severity,
+      }
+      const lines = webhookForm.urlsText
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+      if (lines.length > 0) payload.urls = lines
+      await api.updateWebhookSettings(payload)
+      setNotice(t('admin.webhookSaved'))
+      setWebhookForm((f) => ({ ...f, urlsText: '' }))
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('admin.webhookFailed'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const tabs: {
     id: Tab
     label: string
@@ -162,6 +236,7 @@ export function AdminPage() {
       adminOnly: true,
     },
     { id: 'system', label: t('admin.tabSystem'), icon: HeartPulse },
+    { id: 'alerts', label: t('admin.tabAlerts'), icon: Bell },
   ]
 
   if (!isAdmin && !loading) {
@@ -501,6 +576,131 @@ export function AdminPage() {
                   title: t('admin.workersTools').toLowerCase(),
                 })}
               />
+            </div>
+          )}
+
+          {tab === 'alerts' && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="panel space-y-3 rounded-xl p-5">
+                <h2 className="text-sm font-semibold">{t('admin.alertsTitle')}</h2>
+                <p className="text-xs text-surface-400">{t('admin.alertsSubtitle')}</p>
+                {integrations ? (
+                  <ul className="space-y-2 text-sm text-surface-300">
+                    <li>
+                      Webhook · {integrations.webhook.provider} ·{' '}
+                      {t('admin.endpointsConfigured', {
+                        count: integrations.webhook.endpoints_configured,
+                      })}{' '}
+                      · min {integrations.webhook.min_severity}
+                      {integrations.webhook.source
+                        ? ` · ${t('admin.webhookSource', {
+                            source: integrations.webhook.source,
+                          })}`
+                        : ''}
+                    </li>
+                    {(integrations.webhook.urls_masked || []).map((u) => (
+                      <li key={u} className="font-mono text-[11px] text-surface-400">
+                        {u}
+                      </li>
+                    ))}
+                    <li>
+                      {t('admin.ticketingStatus')}:{' '}
+                      {String(integrations.ticketing.enabled ? 'on' : 'off')} /{' '}
+                      {String(integrations.ticketing.provider)}
+                    </li>
+                    <li>
+                      {t('admin.siemStatus')}:{' '}
+                      {String(integrations.siem.enabled ? 'on' : 'off')} /{' '}
+                      {String(integrations.siem.format)}
+                    </li>
+                  </ul>
+                ) : (
+                  <p className="text-sm text-surface-400">{t('admin.loading')}</p>
+                )}
+              </div>
+
+              <form
+                onSubmit={onSaveWebhook}
+                className="panel space-y-3 rounded-xl p-5"
+              >
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  <Bell className="h-4 w-4 text-accent" />
+                  {t('admin.webhookSave')}
+                </h2>
+                <label className="flex items-center gap-2 text-xs text-surface-300">
+                  <input
+                    type="checkbox"
+                    checked={webhookForm.enabled}
+                    onChange={(e) =>
+                      setWebhookForm((f) => ({
+                        ...f,
+                        enabled: e.target.checked,
+                      }))
+                    }
+                  />
+                  {t('admin.webhookEnabled')}
+                </label>
+                <label className="block space-y-1 text-xs text-surface-400">
+                  {t('admin.webhookProvider')}
+                  <select
+                    value={webhookForm.provider}
+                    onChange={(e) =>
+                      setWebhookForm((f) => ({
+                        ...f,
+                        provider: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-sm"
+                  >
+                    <option value="generic">generic</option>
+                    <option value="slack">slack</option>
+                    <option value="teams">teams</option>
+                  </select>
+                </label>
+                <label className="block space-y-1 text-xs text-surface-400">
+                  {t('admin.webhookMinSeverity')}
+                  <select
+                    value={webhookForm.min_severity}
+                    onChange={(e) =>
+                      setWebhookForm((f) => ({
+                        ...f,
+                        min_severity: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 text-sm"
+                  >
+                    <option value="critical">critical</option>
+                    <option value="high">high</option>
+                    <option value="medium">medium</option>
+                    <option value="low">low</option>
+                  </select>
+                </label>
+                <label className="block space-y-1 text-xs text-surface-400">
+                  {t('admin.webhookUrls')}
+                  <textarea
+                    value={webhookForm.urlsText}
+                    onChange={(e) =>
+                      setWebhookForm((f) => ({
+                        ...f,
+                        urlsText: e.target.value,
+                      }))
+                    }
+                    rows={3}
+                    placeholder="https://hooks.slack.com/..."
+                    className="w-full rounded-md border border-surface-700 bg-surface-900 px-3 py-2 font-mono text-xs"
+                  />
+                </label>
+                <p className="text-[11px] text-surface-500">
+                  {t('admin.webhookUrlsHint')}
+                </p>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full rounded-md bg-accent px-3 py-2 text-sm font-medium text-surface-950 disabled:opacity-50"
+                >
+                  {busy ? t('admin.creating') : t('admin.webhookSave')}
+                </button>
+              </form>
             </div>
           )}
         </>

@@ -303,3 +303,41 @@ export interface ScanCreatePayload {
   config?: Record<string, unknown>
   start_immediately?: boolean
 }
+
+export interface ScanSchedule {
+  id: string
+  organization_id: string
+  name: string
+  scan_type: ScanType
+  engine: ScannerEngine
+  config: Record<string, unknown>
+  interval_minutes: number
+  enabled: boolean
+  next_run_at: string
+  last_run_at: string | null
+  last_scan_id: string | null
+  last_error: string | null
+  created_by_id: string | null
+  created_at: string
+  updated_at: string
+  asset_ids: string[]
+}
+
+export interface ScanScheduleListResponse {
+  items: ScanSchedule[]
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface ScanScheduleCreatePayload {
+  name: string
+  scan_type?: ScanType
+  engine?: ScannerEngine
+  asset_ids: string[]
+  config?: Record<string, unknown>
+  interval_minutes: number
+  enabled?: boolean
+  run_immediately?: boolean
+}

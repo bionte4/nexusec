@@ -13,6 +13,7 @@ from app.api.v1 import (
     reports,
     scans,
     scanner,
+    schedules,
     soc,
     threat_intel,
     vulnerabilities,
@@ -24,6 +25,7 @@ api_router.include_router(auth.router)
 api_router.include_router(organizations.router)
 api_router.include_router(assets.router)
 api_router.include_router(scans.router)
+api_router.include_router(schedules.router)
 api_router.include_router(scanner.router)
 api_router.include_router(normalize.router)
 api_router.include_router(dashboard.router)

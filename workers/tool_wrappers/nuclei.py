@@ -17,7 +17,8 @@ from workers.tool_wrappers.validators import TargetValidationError, validate_tar
 
 _ALLOWED_SEVERITIES = frozenset({"critical", "high", "medium", "low", "info", "unknown"})
 _TAG_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
-_DEFAULT_TEMPLATE_DIR = "/opt/nuclei-templates"
+# Full catalog OOMs under modest RLIMIT_AS; HTTP templates cover typical VA scope.
+_DEFAULT_TEMPLATE_DIR = "/opt/nuclei-templates/http"
 
 
 @dataclass
@@ -81,8 +82,9 @@ class NucleiWrapper:
             default_timeout_seconds=900,
             resource_limits=ResourceLimits(
                 cpu_seconds=900,
-                address_space_bytes=1024 * 1024 * 1024,
-                max_open_files=512,
+                # Nuclei template load is memory-hungry; 1 GiB causes SIGSEGV/exit 2.
+                address_space_bytes=3 * 1024 * 1024 * 1024,
+                max_open_files=4096,
             ),
         )
         self.binary = binary

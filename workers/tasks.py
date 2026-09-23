@@ -115,6 +115,11 @@ def _update_scan(
         scan.progress = progress
     if error_message is not None:
         scan.error_message = error_message
+    elif mark_started or (
+        mark_completed and status == ScanStatus.COMPLETED
+    ):
+        # Clear sticky errors from prior failed attempts on restart/success.
+        scan.error_message = None
     if mark_started and scan.started_at is None:
         scan.started_at = _utcnow()
     if mark_completed:
@@ -489,7 +494,7 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
         exclude_tags = cfg.get("exclude_tags") or cfg.get("etags") or ["dos"]
         rate_limit = int(cfg.get("rate_limit") or 50)
         timeout = int(cfg.get("timeout_seconds") or 900)
-        template_dir = str(cfg.get("template_dir") or "/opt/nuclei-templates")
+        template_dir = str(cfg.get("template_dir") or "/opt/nuclei-templates/http")
 
         try:
             wrapper = NucleiWrapper()
@@ -541,6 +546,7 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
             stdout = stdout[:_MAX_RESULT_CHARS]
             truncated = True
 
+        stderr_snip = (result.stderr or "").strip().replace("\n", " ")[:400]
         payload = {
             "engine": ScannerEngine.NUCLEI.value,
             "targets": targets,
@@ -554,12 +560,15 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
 
         # Nuclei returns 0 even with findings; non-zero indicates tool failure.
         if result.returncode != 0:
+            detail = f"nuclei exited with code {result.returncode}"
+            if stderr_snip:
+                detail = f"{detail}: {stderr_snip}"
             _update_scan(
                 session,
                 scan,
                 status=ScanStatus.FAILED,
                 progress=100.0,
-                error_message=f"nuclei exited with code {result.returncode}",
+                error_message=detail,
                 result_payload=payload,
                 mark_completed=True,
             )
