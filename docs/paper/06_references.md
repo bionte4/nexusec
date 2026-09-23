@@ -234,5 +234,5 @@ Reputation mix: **USENIX Security**, **IEEE**, **ACM/ESEC-FSE**, **Elsevier Comp
 | SOAR / orchestration | [4], [5], [17], [23], [24] |
 | LLM repair / RAG ChatOps | [8]–[11], [36]–[41] |
 | LLM endpoint security | [42]–[45] |
-| Compliance / RMF / VA testing | [12]–[14], [18]–[20], [49]–[54] |
+| Compliance / RMF / VA testing / NIST CSF·800-53 | [12]–[14], [18]–[20], [49]–[54] |
 | Threat landscape (background) | [3], [55] |

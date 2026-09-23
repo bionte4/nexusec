@@ -8,8 +8,8 @@ Development proceeded in capability-oriented increments aligned with operational
 
 1. **Foundation increment** — core domain model (organizations, users/RBAC, assets, scans, vulnerabilities), asynchronous FastAPI API, PostgreSQL persistence, JWT authentication, and audit logging.
 2. **Orchestration increment** — Celery workers, Redis broker/result backend, secure wrappers for third-party CLI scanners, and Docker-based isolation for tool execution.
-3. **Intelligence increment** — unified normalization parsers, fingerprint-based deduplication, compliance metadata enrichment, and compliance report generation (ISO 27001, PCI-DSS, GDPR views).
-4. **Decision-support increment** — threat-intelligence enrichment (e.g., KEV/NVD-oriented signals) beyond static CVSS alone [1], [2], AI remediation via OpenAI-compatible LLM APIs [8]–[10], false-positive analysis [6], [7], and retrieval-augmented SOC ChatOps [11].
+3. **Intelligence increment** — unified normalization parsers, fingerprint-based deduplication, compliance metadata enrichment, and compliance report generation (ISO 27001, PCI-DSS, GDPR, and NIST CSF / SP 800-53 views) [12]–[14], [18], [20].
+4. **Decision-support increment** — threat-intelligence enrichment (e.g., KEV/NVD-oriented signals) beyond static CVSS alone [1], [2], AI remediation via OpenAI-compatible LLM APIs [8]–[10], false-positive analysis [6], [7], optional AI/heuristic NIST control-mapping suggestions with mandatory human acceptance, and retrieval-augmented SOC ChatOps [11].
 5. **Hardening increment** — multi-tenancy controls, observability (health checks, Prometheus metrics), and reproducible Docker Compose deployment.
 
 Each increment produced a deployable slice of the platform that could be exercised through automated tests and API-level acceptance checks. Design decisions were constrained by secure-by-design rules: role-based access control on mutating endpoints, tenant scoping of queries, avoidance of unsafe shell interpolation when wrapping external tools, and exclusion of secrets/PII from application logs. This methodology yields both a research artifact suitable for evaluation and an engineering baseline that can evolve toward production operations.
@@ -57,15 +57,18 @@ During and after normalization, NexusSec attaches **compliance metadata** to fin
 - **ISO/IEC 27001:2022** — Annex A–oriented control references (e.g., management of technical vulnerabilities), stored as structured tags on each finding [12].
 - **PCI DSS v4.0** — requirements associated with vulnerability management and testing (notably **Requirement 11** themes), complemented by asset-level **CDE scope** flags used in SOC queries and reports [13].
 - **GDPR** — risk flags and tags highlighting potential personal-data confidentiality impact (e.g., PII leakage indicators), supporting privacy-oriented remediation prioritization under security-of-processing obligations [14].
+- **NIST CSF 2.0** — category/subcategory identifiers (e.g., `ID.RA-01`, `PR.PS-02`) that situate VA findings under Identify / Protect / Detect / Respond outcomes [18].
+- **NIST SP 800-53 Rev.5** — technical control identifiers commonly paired with continuous vulnerability management (e.g., `RA-5`, `SI-2`, `SC-7`), enabling crosswalk-style assurance alongside ISO Annex A via free NIST catalogs [20].
 
-Compliance report services aggregate active findings into auditor-oriented views (ISO, PCI-DSS, GDPR), while the SOC dashboard and ChatOps retrieval can filter CDE-scoped assets and compliance-tagged vulnerabilities. This closes the gap between scanner output and continuous compliance narratives without a separate offline spreadsheet mapping step [12]–[14].
+Heuristic enrichment fills empty NIST fields from finding context (title, port/protocol, CWE/CVE cues) at ingest time; ISO/PCI/GDPR defaults remain as previously designed. Compliance report services aggregate active findings into auditor-oriented views (**ISO, PCI-DSS, GDPR, and NIST CSF / 800-53**), while the SOC dashboard and ChatOps retrieval can filter CDE-scoped assets and compliance-tagged vulnerabilities. This closes the gap between scanner output and continuous compliance narratives without a separate offline spreadsheet mapping step [12]–[14], [18], [20].
 
 ### 2.2.5 AI Decision-Support Services
 
-AI features are implemented as backend services that consume normalized finding/asset context and call **OpenAI-compatible LLM APIs** (configurable base URL and API key for providers such as Groq, OpenRouter, or OpenAI), with deterministic mock fallbacks for offline evaluation:
+AI features are implemented as backend services that consume normalized finding/asset context and call **OpenAI-compatible LLM APIs** (configurable base URL and API key for providers such as Groq, OpenRouter, or OpenAI), with deterministic mock/heuristic fallbacks for offline evaluation:
 
 - **Remediation / patch generation** — produces explanation, mitigation steps, and secure patch or hardening examples grounded in CWE/description context, following peer-reviewed automated vulnerability-repair research while targeting SOC finding artifacts rather than only source repositories [8]–[10]; results persist to the vulnerability remediation field.
 - **False-positive analysis** — returns structured confidence, likely-FP boolean, and analyst reasoning, stored in finding metadata for review dashboards, analogous to ML/transformer FP triage studied for DAST/SAST alerts [6], [7].
+- **NIST control-mapping suggestion (human-in-the-loop)** — proposes NIST CSF and SP 800-53 identifiers via heuristic rules or an optional LLM call; suggestions are stored as *pending review* in threat-intel metadata and are merged into `compliance_metadata` only after an explicit analyst accept action, preventing silent overwrite of assurance tags [18], [20].
 - **SOC ChatOps (lightweight RAG)** — classifies query intent, retrieves tenant-scoped rows from PostgreSQL (assets, scans, vulnerabilities), injects context into a system prompt, and returns concise operational answers with cited sources, comparable in spirit to RAG-driven SOC copilots [11].
 
 These services are additive: they accelerate analyst workflows but do not replace RBAC, auditability, or human disposition of high-impact findings.
@@ -126,10 +129,11 @@ Figure 1 (ASCII) summarizes the end-to-end flow from scan execution through norm
          +--------------------+--------------------+
          |                    |                    |
          v                    v                    v
-  SOC Dashboard         Compliance Reports    AI Services
-  (severity/risk)       (ISO / PCI / GDPR)    (patch · FP · RAG)
+  SOC Dashboard         Compliance Reports         AI Services
+  (severity/risk)       (ISO / PCI / GDPR /        (patch · FP · NIST
+                         NIST CSF·800-53)           suggest · RAG)
 ```
 
-**Narrative flow.** (1) An authenticated analyst registers assets and starts a scan via the API. (2) The API records the job and publishes a Celery task. (3) A sandboxed worker executes the selected scanner through a secure wrapper and captures raw output. (4) The normalization engine converts tool-specific artifacts into the unified schema, applies fingerprints, and attaches ISO 27001 / PCI-DSS / GDPR metadata [12]–[14]. (5) Findings appear on the SOC dashboard and in compliance reports. (6) Optionally, the analyst invokes AI remediation or false-positive analysis, or asks ChatOps questions that retrieve live database context before generation [6]–[11]. Threat-intelligence workers enrich findings asynchronously to improve prioritization (e.g., actively exploited indicators) [1], [2].
+**Narrative flow.** (1) An authenticated analyst registers assets and starts a scan via the API. (2) The API records the job and publishes a Celery task. (3) A sandboxed worker executes the selected scanner through a secure wrapper and captures raw output. (4) The normalization engine converts tool-specific artifacts into the unified schema, applies fingerprints, and attaches ISO 27001 / PCI-DSS / GDPR / NIST CSF–800-53 metadata [12]–[14], [18], [20]. (5) Findings appear on the SOC dashboard and in compliance reports (including NIST CSF / SP 800-53 exports). (6) Optionally, the analyst invokes AI remediation, false-positive analysis, or NIST control suggestions (accept after review), or asks ChatOps questions that retrieve live database context before generation [6]–[11]. Threat-intelligence workers enrich findings asynchronously to improve prioritization (e.g., actively exploited indicators) [1], [2].
 
 This architecture directly supports the research objectives stated in the Introduction: isolating scan concurrency from API latency, guaranteeing a single normalized evidence model across tools, and enabling measurable AI-assisted remediation and triage on top of compliance-aware SOC data [3]–[5], [11].
