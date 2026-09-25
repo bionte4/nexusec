@@ -50,8 +50,10 @@ API docs: http://localhost:8000/docs
 
 ## Usage guides
 
-- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei), normalize, triage, compliance reports
+- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas), normalize, triage, compliance reports
+- **Scanner connectors (UI cards):** [`docs/scanner-connectors.md`](docs/scanner-connectors.md) — Nmap, Nuclei, NexuSec, OpenVAS presets, worker config, troubleshooting
 - Data model: [`docs/data-model.md`](docs/data-model.md)
+- Integrations & hardening: [`docs/integrations-hardening.md`](docs/integrations-hardening.md)
 
 ## Auth (Prompt 2)
 

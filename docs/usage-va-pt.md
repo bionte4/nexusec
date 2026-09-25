@@ -140,6 +140,8 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 
 Jenis `scan_type`: `discovery` · `va` · `pt` · `compliance` · `custom`.
 
+Penjelasan detail kartu UI **Scanner connectors**, preset, config worker, normalisasi, dan troubleshooting: **[`scanner-connectors.md`](scanner-connectors.md)**.
+
 ### 5.2 Buat & jalankan scan Nmap (VA discovery)
 
 ```bash

@@ -19,6 +19,8 @@ Tenant overrides: Admin → Integrations → webhook settings (stored in `organi
 
 ## OpenVAS connector
 
+Lihat juga panduan penuh kartu engine: [`scanner-connectors.md`](scanner-connectors.md)#6-openvas--va--greenbone-gvm-mock--xml.
+
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `OPENVAS_MODE` | `mock` | Synthetic GVM XML for labs/CI without Greenbone |
