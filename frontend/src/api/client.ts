@@ -109,6 +109,7 @@ export const api = {
     if (params.asset_id) q.set('asset_id', params.asset_id)
     if (params.scan_id) q.set('scan_id', params.scan_id)
     if (params.search) q.set('search', params.search)
+    if (params.overdue) q.set('overdue', 'true')
     const qs = q.toString()
     return request<VulnerabilityListResponse>(
       `/api/v1/vulnerabilities${qs ? `?${qs}` : ''}`,

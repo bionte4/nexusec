@@ -32,6 +32,11 @@ class ThreatIntelCve(Base):
     required_action: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     nvd_cvss_score: Mapped[Optional[float]] = mapped_column(nullable=True)
     nvd_exploitability_score: Mapped[Optional[float]] = mapped_column(nullable=True)
+    epss_score: Mapped[Optional[float]] = mapped_column(nullable=True)
+    epss_percentile: Mapped[Optional[float]] = mapped_column(nullable=True)
+    epss_fetched_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     sources: Mapped[list[Any]] = mapped_column(JSONB, default=list, nullable=False)
     raw_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

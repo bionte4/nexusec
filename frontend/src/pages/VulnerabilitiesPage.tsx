@@ -59,6 +59,8 @@ export function VulnerabilitiesPage() {
   const filterScanId = searchParams.get('scan_id') || ''
   const severityParam = (searchParams.get('severity') || '') as Severity | ''
   const statusParam = (searchParams.get('status') || '') as FindingStatus | ''
+  const overdueParam =
+    searchParams.get('overdue') === '1' || searchParams.get('overdue') === 'true'
 
   const [items, setItems] = useState<Vulnerability[]>([])
   const [total, setTotal] = useState(0)
@@ -121,6 +123,7 @@ export function VulnerabilitiesPage() {
           search: search || undefined,
           asset_id: filterAssetId || undefined,
           scan_id: filterScanId || undefined,
+          overdue: overdueParam || undefined,
         })
         if (!cancelled) {
           setItems(res.items)
@@ -154,6 +157,7 @@ export function VulnerabilitiesPage() {
     search,
     filterAssetId,
     filterScanId,
+    overdueParam,
     usingMock,
     token,
     setUsingMock,

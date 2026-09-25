@@ -107,6 +107,7 @@ async def normalize_scan_raw_result(
     from app.core.enums import FindingStatus
     from app.models.vulnerability import Vulnerability
     from app.normalization.fingerprint import compute_fingerprint
+    from app.services.sla import compute_remediation_due_at
 
     stats = IngestStats()
     now = datetime.now(timezone.utc)
@@ -156,6 +157,9 @@ async def normalize_scan_raw_result(
                     source_tool=finding.source_tool,
                     first_seen_at=now,
                     last_seen_at=now,
+                    remediation_due_at=compute_remediation_due_at(
+                        finding.severity, from_time=now
+                    ),
                 )
             )
             stats.inserted += 1

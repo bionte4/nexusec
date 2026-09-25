@@ -44,6 +44,8 @@ class ActivelyExploitedItem(BaseModel):
     is_actively_exploited: bool
     has_public_exploit: bool
     threat_risk_score: Optional[float]
+    epss_score: Optional[float] = None
+    epss_percentile: Optional[float] = None
     kev_date_added: Optional[date]
     kev_due_date: Optional[date]
     threat_intel_metadata: dict[str, Any] = Field(default_factory=dict)

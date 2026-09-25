@@ -336,9 +336,21 @@ UI: **SOC Chat** — tanya dalam bahasa natural, contoh:
 curl -s -H "$AUTH" "$API/api/v1/reports/iso27001" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/pci-dss" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/gdpr" | python3 -m json.tool
+curl -s -H "$AUTH" "$API/api/v1/reports/nist-csf" | python3 -m json.tool
 ```
 
-Gunakan setelah finding punya `compliance_metadata` (ISO Annex A, PCI Req.11, GDPR Art.32, dll.).
+Gunakan setelah finding punya `compliance_metadata` (ISO Annex A, PCI Req.11, GDPR Art.32, NIST CSF/800-53, dll.).
+
+Di UI detail finding: **Suggest NIST** → tinjau → **Accept** (human review).
+
+---
+
+## 8b. Prioritas RBVM (EPSS / SLA / retest)
+
+- Enrichment threat intel menambahkan **EPSS** (FIRST.org) ke skor `threat_risk_score` bersama KEV/NVD.
+- Finding baru mendapat `remediation_due_at` sesuai SLA severity (default: Critical 7h, High 14h, Medium 30h, … — lihat `.env` `SLA_DAYS_*`).
+- Dashboard menampilkan **Overdue SLA**; filter: `GET /api/v1/vulnerabilities?overdue=true`.
+- Status → `remediated` otomatis membuat scan verifikasi (auto-retest) bila `AUTO_RETEST_ENABLED=true`.
 
 ---
 
@@ -360,7 +372,7 @@ Gunakan setelah finding punya `compliance_metadata` (ISO Annex A, PCI Req.11, GD
 - [ ] Job `scan_type=pt` tercatat di platform  
 - [ ] Finding tervalidasi ditandai `confirmed` / `in_progress`  
 - [ ] Evidence & langkah exploit **tidak** memasukkan kredensial rahasia ke log/comment  
-- [ ] Closing meeting: laporan ISO/PCI/GDPR + daftar residual risk  
+- [ ] Closing meeting: laporan ISO/PCI/GDPR/NIST + daftar residual risk / overdue SLA
 
 ---
 

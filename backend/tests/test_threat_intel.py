@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.core.enums import Severity
 from app.services.threat_intel.enrichment import (
     ThreatIntelService,
@@ -75,6 +77,25 @@ def test_compute_threat_risk_score_kev_boost() -> None:
     )
     assert boosted > base
     assert boosted == 100.0  # capped
+
+
+def test_compute_threat_risk_score_epss_adds_weight() -> None:
+    without = compute_threat_risk_score(
+        severity=Severity.MEDIUM,
+        cvss_score=5.0,
+        in_kev=False,
+        has_public_exploit=False,
+        epss_score=0.0,
+    )
+    with_epss = compute_threat_risk_score(
+        severity=Severity.MEDIUM,
+        cvss_score=5.0,
+        in_kev=False,
+        has_public_exploit=False,
+        epss_score=0.9,
+    )
+    assert with_epss > without
+    assert with_epss - without == pytest.approx(18.0)  # 0.9 * 20
 
 
 def test_detect_public_exploits() -> None:

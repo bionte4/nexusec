@@ -15,6 +15,7 @@ from app.models.threat_intel import ThreatIntelCve, ThreatIntelSyncRun
 from app.models.vulnerability import Vulnerability
 from app.services.threat_intel.kev_client import KevEntry, fetch_kev_catalog
 from app.services.threat_intel.nvd_client import NvdEnrichment, fetch_nvd_cve
+from app.services.threat_intel.epss_client import EpssScore, fetch_epss_scores
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 KEV_SCORE_BOOST = 25.0
 PUBLIC_EXPLOIT_BOOST = 15.0
 RANSOMWARE_BOOST = 10.0
+# EPSS contributes up to this many points (epss 0.0–1.0 → 0–EPSS_SCORE_WEIGHT)
+EPSS_SCORE_WEIGHT = 20.0
 
 SEVERITY_BASE = {
     Severity.CRITICAL: 90.0,
@@ -49,8 +52,12 @@ def compute_threat_risk_score(
     in_kev: bool,
     has_public_exploit: bool,
     known_ransomware_use: Optional[str] = None,
+    epss_score: Optional[float] = None,
 ) -> float:
-    """Risk-Based Vulnerability Management priority score (0–100+ capped at 100)."""
+    """Risk-Based Vulnerability Management priority score (0–100 capped).
+
+    Combines severity/CVSS baseline with KEV, public-exploit, ransomware, and EPSS.
+    """
     base = SEVERITY_BASE.get(severity, 30.0)
     if cvss_score is not None:
         base = max(base, float(cvss_score) * 10.0)
@@ -61,6 +68,8 @@ def compute_threat_risk_score(
         score += PUBLIC_EXPLOIT_BOOST
     if (known_ransomware_use or "").lower() == "known":
         score += RANSOMWARE_BOOST
+    if epss_score is not None:
+        score += max(0.0, min(1.0, float(epss_score))) * EPSS_SCORE_WEIGHT
     return min(100.0, round(score, 2))
 
 
@@ -148,6 +157,29 @@ class ThreatIntelService:
         self.session.flush()
         return row
 
+    def upsert_epss(self, score: EpssScore) -> ThreatIntelCve:
+        row = self.session.get(ThreatIntelCve, score.cve_id)
+        if row is None:
+            row = ThreatIntelCve(cve_id=score.cve_id, sources=["epss"])
+            self.session.add(row)
+        else:
+            sources = list(row.sources or [])
+            if "epss" not in sources:
+                sources.append("epss")
+            row.sources = sources
+        row.epss_score = score.epss
+        row.epss_percentile = score.percentile
+        row.epss_fetched_at = datetime.now(timezone.utc)
+        meta = dict(row.raw_metadata or {})
+        meta["epss"] = {
+            "epss": score.epss,
+            "percentile": score.percentile,
+            "date": score.score_date.isoformat() if score.score_date else None,
+        }
+        row.raw_metadata = meta
+        self.session.flush()
+        return row
+
     def sync_kev_catalog(self) -> dict[str, Any]:
         run = self.start_sync_run("kev")
         try:
@@ -165,9 +197,10 @@ class ThreatIntelService:
         *,
         limit: int = 500,
         fetch_nvd: bool = True,
+        fetch_epss: bool = True,
         only_unenriched: bool = False,
     ) -> dict[str, Any]:
-        """Match findings with CVE IDs against KEV/NVD and set Actively Exploited flags."""
+        """Match findings with CVE IDs against KEV/NVD/EPSS and set RBVM scores."""
         run = self.start_sync_run("enrich")
         try:
             stmt = select(Vulnerability).where(Vulnerability.cve_id.is_not(None))
@@ -175,6 +208,23 @@ class ThreatIntelService:
                 stmt = stmt.where(Vulnerability.threat_enriched_at.is_(None))
             stmt = stmt.limit(limit)
             vulns = list(self.session.scalars(stmt).all())
+
+            # Prefetch EPSS for the batch
+            epss_map: dict[str, EpssScore] = {}
+            if fetch_epss and self.settings.epss_enabled:
+                cve_ids = [
+                    cve
+                    for v in vulns
+                    if (cve := normalize_cve_id(v.cve_id)) is not None
+                ]
+                if cve_ids:
+                    epss_map = fetch_epss_scores(
+                        cve_ids,
+                        url=self.settings.epss_api_url,
+                        timeout=self.settings.epss_timeout_seconds,
+                    )
+                    for score in epss_map.values():
+                        self.upsert_epss(score)
 
             enriched = 0
             nvd_lookups = 0
@@ -194,10 +244,24 @@ class ThreatIntelService:
                     if nvd is not None:
                         intel = self.upsert_nvd_enrichment(nvd)
 
-                if intel is None:
-                    # No KEV/NVD hit — still mark as enriched with baseline score
+                epss_row = epss_map.get(cve_id)
+                epss_val = (
+                    epss_row.epss
+                    if epss_row is not None
+                    else (intel.epss_score if intel is not None else None)
+                )
+                epss_pct = (
+                    epss_row.percentile
+                    if epss_row is not None
+                    else (intel.epss_percentile if intel is not None else None)
+                )
+
+                if intel is None and epss_row is None:
+                    # No KEV/NVD/EPSS hit — still mark as enriched with baseline score
                     vuln.is_actively_exploited = False
                     vuln.has_public_exploit = False
+                    vuln.epss_score = None
+                    vuln.epss_percentile = None
                     vuln.threat_risk_score = compute_threat_risk_score(
                         severity=vuln.severity,
                         cvss_score=vuln.cvss_score,
@@ -209,30 +273,38 @@ class ThreatIntelService:
                     enriched += 1
                     continue
 
-                in_kev = bool(intel.in_kev)
-                has_exploit = bool(intel.has_public_exploit)
+                in_kev = bool(intel.in_kev) if intel is not None else False
+                has_exploit = bool(intel.has_public_exploit) if intel is not None else False
+                ransomware = intel.known_ransomware_use if intel is not None else None
                 vuln.is_actively_exploited = in_kev
                 vuln.has_public_exploit = has_exploit
-                vuln.kev_date_added = intel.date_added
-                vuln.kev_due_date = intel.due_date
+                if intel is not None:
+                    vuln.kev_date_added = intel.date_added
+                    vuln.kev_due_date = intel.due_date
+                vuln.epss_score = epss_val
+                vuln.epss_percentile = epss_pct
                 vuln.threat_risk_score = compute_threat_risk_score(
                     severity=vuln.severity,
-                    cvss_score=vuln.cvss_score or intel.nvd_cvss_score,
+                    cvss_score=vuln.cvss_score
+                    or (intel.nvd_cvss_score if intel is not None else None),
                     in_kev=in_kev,
                     has_public_exploit=has_exploit,
-                    known_ransomware_use=intel.known_ransomware_use,
+                    known_ransomware_use=ransomware,
+                    epss_score=epss_val,
                 )
                 vuln.threat_intel_metadata = {
                     "cve_id": cve_id,
                     "matched": True,
                     "in_kev": in_kev,
                     "has_public_exploit": has_exploit,
-                    "vendor_project": intel.vendor_project,
-                    "product": intel.product,
-                    "known_ransomware_use": intel.known_ransomware_use,
-                    "required_action": intel.required_action,
-                    "nvd_cvss_score": intel.nvd_cvss_score,
-                    "sources": list(intel.sources or []),
+                    "vendor_project": intel.vendor_project if intel else None,
+                    "product": intel.product if intel else None,
+                    "known_ransomware_use": ransomware,
+                    "required_action": intel.required_action if intel else None,
+                    "nvd_cvss_score": intel.nvd_cvss_score if intel else None,
+                    "epss_score": epss_val,
+                    "epss_percentile": epss_pct,
+                    "sources": list(intel.sources or []) if intel else (["epss"] if epss_row else []),
                 }
                 vuln.threat_enriched_at = datetime.now(timezone.utc)
 
@@ -245,13 +317,14 @@ class ThreatIntelService:
             self.finish_sync_run(
                 run,
                 status="success",
-                records_upserted=nvd_lookups,
+                records_upserted=nvd_lookups + len(epss_map),
                 vulnerabilities_enriched=enriched,
             )
             return {
                 "status": "success",
                 "vulnerabilities_enriched": enriched,
                 "nvd_lookups": nvd_lookups,
+                "epss_lookups": len(epss_map),
                 "run_id": str(run.id),
             }
         except Exception as exc:

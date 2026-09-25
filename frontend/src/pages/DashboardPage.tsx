@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
   CheckCircle2,
+  Clock,
   Server,
   ShieldAlert,
 } from 'lucide-react'
@@ -115,7 +116,7 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
           label={t('dashboard.totalAssets')}
           value={data.total_assets}
@@ -139,6 +140,14 @@ export function DashboardPage() {
           icon={AlertTriangle}
           tone="warn"
           to="/vulnerabilities?severity=high&status=open"
+        />
+        <SummaryCard
+          label={t('dashboard.overdue')}
+          value={data.overdue_findings ?? 0}
+          hint={t('dashboard.overdueHint')}
+          icon={Clock}
+          tone={(data.overdue_findings ?? 0) > 0 ? 'danger' : 'ok'}
+          to="/vulnerabilities?overdue=1"
         />
         <SummaryCard
           label={t('dashboard.compliance')}

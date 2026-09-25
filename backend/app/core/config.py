@@ -66,6 +66,21 @@ class Settings(BaseSettings):
     threat_intel_sync_enabled: bool = True
     threat_intel_kev_interval_hours: int = 6
     threat_intel_enrich_interval_hours: int = 1
+    epss_api_url: str = "https://api.first.org/data/v1/epss"
+    epss_enabled: bool = True
+    epss_timeout_seconds: float = 20.0
+
+    # --- Remediation SLA (days from first open / status re-open) ---
+    sla_days_critical: int = 7
+    sla_days_high: int = 14
+    sla_days_medium: int = 30
+    sla_days_low: int = 90
+    sla_days_info: int = 180
+
+    # --- Auto-retest when finding marked remediated ---
+    auto_retest_enabled: bool = True
+    auto_retest_engine: str = "nuclei"  # nmap | nuclei | nexusec
+    auto_retest_scan_type: str = "va"
 
     # --- Observability (Prompt 13) ---
     health_check_timeout_seconds: float = 3.0

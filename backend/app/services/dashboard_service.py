@@ -77,13 +77,27 @@ class DashboardService:
             )
             or 0
         )
+        now = datetime.now(timezone.utc)
+        overdue_findings = int(
+            await self.db.scalar(
+                select(func.count()).select_from(Vulnerability).where(
+                    *self._org_vuln(
+                        Vulnerability.status.in_(tuple(ACTIVE_FINDING_STATUSES)),
+                        Vulnerability.remediation_due_at.is_not(None),
+                        Vulnerability.remediation_due_at < now,
+                    )
+                )
+            )
+            or 0
+        )
 
         return DashboardOverview(
-            generated_at=datetime.now(timezone.utc),
+            generated_at=now,
             active_by_severity=active_by_severity,
             status_breakdown=status_breakdown,
             total_assets=total_assets,
             assets_with_active_findings=assets_with_active,
+            overdue_findings=overdue_findings,
             asset_risk_posture=asset_risk,
             trend=trend,
         )

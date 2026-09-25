@@ -1,5 +1,6 @@
 """Threat intelligence package — CISA KEV & NVD enrichment."""
 
+from app.services.threat_intel.epss_client import fetch_epss_score, fetch_epss_scores, parse_epss_payload
 from app.services.threat_intel.enrichment import (
     ThreatIntelService,
     compute_threat_risk_score,
@@ -16,4 +17,7 @@ __all__ = [
     "parse_kev_catalog",
     "detect_public_exploits",
     "fetch_nvd_cve",
+    "fetch_epss_score",
+    "fetch_epss_scores",
+    "parse_epss_payload",
 ]

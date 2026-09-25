@@ -27,6 +27,7 @@ export const MOCK_DASHBOARD: DashboardOverview = {
   },
   total_assets: 48,
   assets_with_active_findings: 19,
+  overdue_findings: 5,
   asset_risk_posture: [
     {
       asset_id: 'a1000000-0000-4000-8000-000000000001',

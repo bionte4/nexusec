@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import FindingStatus
+from app.services.sla import compute_remediation_due_at
 from app.models.asset import Asset
 from app.models.vulnerability import Vulnerability
 from app.normalization.compliance import enrich_compliance
@@ -134,6 +135,7 @@ class FindingIngestionService:
                     source_tool=finding.source_tool,
                     first_seen_at=now,
                     last_seen_at=now,
+                    remediation_due_at=compute_remediation_due_at(finding.severity, from_time=now),
                 )
                 self.session.add(row)
                 stats.inserted += 1

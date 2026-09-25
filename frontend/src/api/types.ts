@@ -52,6 +52,7 @@ export interface DashboardOverview {
   status_breakdown: Record<string, number>
   total_assets: number
   assets_with_active_findings: number
+  overdue_findings?: number
   asset_risk_posture: AssetRiskSummary[]
   trend: TrendPoint[]
 }
@@ -89,6 +90,13 @@ export interface Vulnerability {
   remediation_owner_id: string | null
   remediation_owner_label: string | null
   status_changed_at: string | null
+  is_actively_exploited?: boolean
+  has_public_exploit?: boolean
+  epss_score?: number | null
+  epss_percentile?: number | null
+  threat_risk_score?: number | null
+  remediation_due_at?: string | null
+  last_retest_scan_id?: string | null
   threat_intel_metadata?: Record<string, unknown>
   first_seen_at: string
   last_seen_at: string
@@ -201,6 +209,7 @@ export interface VulnListParams {
   asset_id?: string
   scan_id?: string
   search?: string
+  overdue?: boolean
 }
 
 export type AssetType = 'ip' | 'domain' | 'cloud_resource'

@@ -90,7 +90,9 @@ class Scan(Base):
         "Asset", secondary="scan_assets", back_populates="scans"
     )
     vulnerabilities: Mapped[list[Vulnerability]] = relationship(
-        "Vulnerability", back_populates="scan"
+        "Vulnerability",
+        back_populates="scan",
+        foreign_keys="Vulnerability.scan_id",
     )
 
     def __repr__(self) -> str:

@@ -71,6 +71,7 @@ async def list_vulnerabilities(
     scan_id: uuid.UUID | None = Query(None),
     owner_id: uuid.UUID | None = Query(None),
     search: str | None = Query(None),
+    overdue: bool = Query(False, description="Only active findings past remediation SLA"),
     service: VulnerabilityService = Depends(get_vuln_service),
 ) -> VulnerabilityListResponse:
     return await service.list(
@@ -82,6 +83,7 @@ async def list_vulnerabilities(
         scan_id=scan_id,
         owner_id=owner_id,
         search=search,
+        overdue=overdue,
         organization_id=_org_scope(tenant),
     )
 
