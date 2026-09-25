@@ -18,5 +18,5 @@ python-multipart>=0.0.17
 prometheus-fastapi-instrumentator>=7.0.0
 prometheus-client>=0.21.0
 pytest>=8.3.0
-pytest-asyncio>=0.24.0
+reportlab>=4.2.0
 

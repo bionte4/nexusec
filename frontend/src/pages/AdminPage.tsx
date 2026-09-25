@@ -221,6 +221,26 @@ export function AdminPage() {
     }
   }
 
+  async function onBackfill() {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      const res = await api.backfillReportMetadata({ limit: 1000 })
+      setNotice(
+        t('admin.backfillDone', {
+          nist: res.nist_updated,
+          sla: res.sla_updated,
+          scanned: res.scanned,
+        }),
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('admin.backfillFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const tabs: {
     id: Tab
     label: string
@@ -701,6 +721,18 @@ export function AdminPage() {
                   {busy ? t('admin.creating') : t('admin.webhookSave')}
                 </button>
               </form>
+              <div className="mt-6 border-t border-surface-700 pt-4">
+                <h3 className="mb-2 text-sm font-medium">{t('admin.backfill')}</h3>
+                <p className="mb-3 text-xs text-surface-400">{t('admin.backfillHint')}</p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onBackfill()}
+                  className="w-full rounded-md border border-surface-600 px-3 py-2 text-sm text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  {busy ? t('admin.creating') : t('admin.backfill')}
+                </button>
+              </div>
             </div>
           )}
         </>

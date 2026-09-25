@@ -235,23 +235,49 @@ def get_ticket_client() -> TicketClient:
     return NullTicketClient()
 
 
-def sync_critical_ticket(
+_SEVERITY_RANK = {
+    "critical": 4,
+    "high": 3,
+    "medium": 2,
+    "low": 1,
+    "info": 0,
+    "unknown": 0,
+}
+
+
+def sync_ticket(
     finding: dict[str, Any], *, existing_key: Optional[str] = None
 ) -> TicketResult:
-    """Create/update a ticket when a critical finding is confirmed."""
-    if str(finding.get("severity", "")).lower() != "critical":
+    """Create/update a ticket when finding meets configured severity/status gates."""
+    settings = get_settings()
+    sev = str(finding.get("severity", "")).lower()
+    min_sev = (settings.ticket_min_severity or "critical").lower()
+    if _SEVERITY_RANK.get(sev, 0) < _SEVERITY_RANK.get(min_sev, 4):
         return TicketResult(
-            provider=get_settings().ticket_provider,
+            provider=settings.ticket_provider,
             action="skipped",
-            error="only critical findings open tickets",
+            error=f"severity below ticket_min_severity ({min_sev})",
         )
-    if str(finding.get("status", "")).lower() not in {"confirmed", "open", "in_progress"}:
+    if str(finding.get("status", "")).lower() not in {
+        "confirmed",
+        "open",
+        "in_progress",
+        "reopened",
+        "remediated",
+    }:
         return TicketResult(
-            provider=get_settings().ticket_provider,
+            provider=settings.ticket_provider,
             action="skipped",
             error="status not eligible for ticketing",
         )
     return get_ticket_client().create_or_update(finding, existing_key=existing_key)
+
+
+def sync_critical_ticket(
+    finding: dict[str, Any], *, existing_key: Optional[str] = None
+) -> TicketResult:
+    """Backward-compatible alias for sync_ticket."""
+    return sync_ticket(finding, existing_key=existing_key)
 
 
 def _jira_adf(text: str) -> dict[str, Any]:

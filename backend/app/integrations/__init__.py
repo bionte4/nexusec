@@ -8,7 +8,7 @@ from uuid import UUID
 from app.core.enums import FindingStatus, Severity
 from app.integrations.common import finding_payload
 from app.integrations.siem import SiemForwarder
-from app.integrations.ticketing import TicketResult, sync_critical_ticket
+from app.integrations.ticketing import TicketResult, sync_ticket as create_or_update_ticket
 from app.integrations.webhooks import WebhookNotifier
 
 
@@ -54,7 +54,7 @@ def dispatch_integrations(
     Synchronous dispatch used by Celery workers / API dry-runs.
 
     - Webhook: critical/high (configurable)
-    - Ticket: critical + confirmed/open/in_progress
+    - Ticket: severity ≥ ticket_min_severity + eligible status
     - SIEM: always when enabled
     """
     result: dict[str, Any] = {"finding_id": finding.get("vulnerability_id")}
@@ -64,7 +64,7 @@ def dispatch_integrations(
 
     ticket: Optional[TicketResult] = None
     if sync_ticket:
-        ticket = sync_critical_ticket(finding, existing_key=existing_ticket_key)
+        ticket = create_or_update_ticket(finding, existing_key=existing_ticket_key)
         result["ticket"] = {
             "provider": ticket.provider,
             "action": ticket.action,

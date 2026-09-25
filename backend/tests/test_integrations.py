@@ -112,10 +112,32 @@ def test_siem_forwarder_posts_json(sample_finding: dict) -> None:
     assert headers["Authorization"] == "Splunk secret"
 
 
-def test_ticket_skips_non_critical(sample_finding: dict) -> None:
+def test_ticket_skips_below_min_severity(sample_finding: dict) -> None:
     sample_finding["severity"] = "high"
     result = sync_critical_ticket(sample_finding)
     assert result.action == "skipped"
+
+
+def test_ticket_allows_high_when_min_is_high(sample_finding: dict, monkeypatch) -> None:
+    from app.integrations import ticketing as ticketing_mod
+    from app.integrations.ticketing import TicketResult
+
+    settings = MagicMock()
+    settings.ticket_provider = "jira"
+    settings.ticket_min_severity = "high"
+    monkeypatch.setattr(ticketing_mod, "get_settings", lambda: settings)
+
+    sample_finding["severity"] = "high"
+    sample_finding["status"] = "confirmed"
+    with patch.object(ticketing_mod, "get_ticket_client") as get_client:
+        client = MagicMock()
+        client.create_or_update.return_value = TicketResult(
+            provider="jira", action="created", key="SEC-1", url="https://j/SEC-1"
+        )
+        get_client.return_value = client
+        result = sync_critical_ticket(sample_finding)
+    assert result.action == "created"
+    assert result.key == "SEC-1"
 
 
 def test_jira_create_issue(sample_finding: dict) -> None:
@@ -218,12 +240,13 @@ def test_dispatch_integrations_orchestration(sample_finding: dict) -> None:
 
     # Cleaner direct test of dispatch_integrations internals via patching its dependencies
     import app.integrations as integ_mod
+    from app.integrations.ticketing import TicketResult
 
     with patch.object(integ_mod, "WebhookNotifier") as WN:
         WN.return_value.send.return_value = [{"ok": True}]
-        with patch.object(integ_mod, "sync_critical_ticket") as ST:
-            ST.return_value = MagicMock(
-                provider="jira", action="created", key="SEC-1", url="u", error=None
+        with patch.object(integ_mod, "create_or_update_ticket") as ST:
+            ST.return_value = TicketResult(
+                provider="jira", action="created", key="SEC-1", url="u"
             )
             with patch.object(integ_mod, "SiemForwarder") as SF:
                 SF.return_value.forward.return_value = {"ok": True, "format": "json"}

@@ -337,11 +337,25 @@ curl -s -H "$AUTH" "$API/api/v1/reports/iso27001" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/pci-dss" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/gdpr" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/nist-csf" | python3 -m json.tool
+
+# PDF (binary)
+curl -s -H "$AUTH" "$API/api/v1/reports/iso27001/pdf" -o iso27001.pdf
+curl -s -H "$AUTH" "$API/api/v1/reports/nist-csf/pdf" -o nist.pdf
 ```
 
 Gunakan setelah finding punya `compliance_metadata` (ISO Annex A, PCI Req.11, GDPR Art.32, NIST CSF/800-53, dll.).
 
-Di UI detail finding: **Suggest NIST** → tinjau → **Accept** (human review).
+Di UI: tombol **ISO / PCI / GDPR / NIST** (JSON) dan **… PDF**. Detail finding: **Suggest NIST** → tinjau → **Accept**.
+
+Backfill finding lama (Admin):
+
+```bash
+curl -s -X POST -H "$AUTH" "$API/api/v1/reports/backfill-metadata?limit=1000"
+```
+
+Atau **Admin → Alerts → Backfill NIST + SLA**.
+
+Ticketing (Jira/ServiceNow): set `TICKET_ENABLED=true`, kredensial provider, dan opsional `TICKET_MIN_SEVERITY=high`. Di detail finding: **Create / sync ticket**.
 
 ---
 

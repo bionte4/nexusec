@@ -360,7 +360,10 @@ export function VulnerabilitiesPage() {
     setNotice(t('vulns.csvExported', { count: filtered.length }))
   }
 
-  async function exportReport(kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf') {
+  async function exportReport(
+    kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf',
+    format: 'json' | 'pdf' = 'json',
+  ) {
     setBusy(true)
     setNotice(null)
     setError(null)
@@ -369,13 +372,18 @@ export function VulnerabilitiesPage() {
         setError(t('vulns.reportLiveRequired'))
         return
       }
-      const report = await api.getComplianceReport(kind)
-      downloadText(
-        `nexusec-${kind}-${new Date().toISOString().slice(0, 10)}.json`,
-        JSON.stringify(report, null, 2),
-        'application/json',
-      )
-      setNotice(t('vulns.reportExported', { kind }))
+      if (format === 'pdf') {
+        await api.downloadCompliancePdf(kind)
+        setNotice(t('vulns.reportPdfExported', { kind }))
+      } else {
+        const report = await api.getComplianceReport(kind)
+        downloadText(
+          `nexusec-${kind}-${new Date().toISOString().slice(0, 10)}.json`,
+          JSON.stringify(report, null, 2),
+          'application/json',
+        )
+        setNotice(t('vulns.reportExported', { kind }))
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('vulns.reportFailed'))
     } finally {
@@ -416,10 +424,26 @@ export function VulnerabilitiesPage() {
           <button
             type="button"
             disabled={busy}
+            onClick={() => void exportReport('iso27001', 'pdf')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            ISO PDF
+          </button>
+          <button
+            type="button"
+            disabled={busy}
             onClick={() => void exportReport('pci-dss')}
             className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
           >
             PCI-DSS
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportReport('pci-dss', 'pdf')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            PCI PDF
           </button>
           <button
             type="button"
@@ -432,10 +456,26 @@ export function VulnerabilitiesPage() {
           <button
             type="button"
             disabled={busy}
+            onClick={() => void exportReport('gdpr', 'pdf')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            GDPR PDF
+          </button>
+          <button
+            type="button"
+            disabled={busy}
             onClick={() => void exportReport('nist-csf')}
             className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
           >
             NIST
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportReport('nist-csf', 'pdf')}
+            className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            NIST PDF
           </button>
         </div>
       </header>

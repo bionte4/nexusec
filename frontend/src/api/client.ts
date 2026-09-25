@@ -297,6 +297,76 @@ export const api = {
     return request<Record<string, unknown>>(`/api/v1/reports/${kind}`)
   },
 
+  async downloadCompliancePdf(kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf') {
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const orgId = getOrganizationId()
+    if (orgId) headers.set('X-Organization-Id', orgId)
+    const res = await fetch(`/api/v1/reports/${kind}/pdf`, { headers })
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = (await res.json()) as { detail?: string }
+        if (typeof body.detail === 'string') detail = body.detail
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(res.status, detail)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `nexusec-${kind}-${new Date().toISOString().slice(0, 10)}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  backfillReportMetadata(opts: {
+    limit?: number
+    fill_nist?: boolean
+    fill_sla?: boolean
+  } = {}) {
+    const q = new URLSearchParams()
+    if (opts.limit != null) q.set('limit', String(opts.limit))
+    if (opts.fill_nist != null) q.set('fill_nist', String(opts.fill_nist))
+    if (opts.fill_sla != null) q.set('fill_sla', String(opts.fill_sla))
+    const qs = q.toString()
+    return request<{
+      status: string
+      scanned: number
+      nist_updated: number
+      sla_updated: number
+      limit: number
+    }>(`/api/v1/reports/backfill-metadata${qs ? `?${qs}` : ''}`, {
+      method: 'POST',
+    })
+  },
+
+  dispatchIntegrations(
+    vulnerabilityId: string,
+    opts: {
+      send_webhook?: boolean
+      sync_ticket?: boolean
+      forward_siem?: boolean
+      async_mode?: boolean
+    } = {},
+  ) {
+    return request<Record<string, unknown>>(
+      `/api/v1/integrations/vulnerabilities/${vulnerabilityId}/dispatch`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          send_webhook: opts.send_webhook ?? false,
+          sync_ticket: opts.sync_ticket ?? true,
+          forward_siem: opts.forward_siem ?? false,
+          async_mode: opts.async_mode ?? false,
+        }),
+      },
+    )
+  },
+
   suggestNistControls(id: string, opts: { persist?: boolean; use_llm?: boolean } = {}) {
     const q = new URLSearchParams()
     if (opts.persist != null) q.set('persist', String(opts.persist))

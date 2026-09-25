@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     ticket_provider: str = "none"  # none | jira | servicenow
     ticket_enabled: bool = False
+    ticket_min_severity: str = "critical"  # critical | high | medium
     jira_base_url: str = ""
     jira_email: str = ""
     jira_api_token: str = ""

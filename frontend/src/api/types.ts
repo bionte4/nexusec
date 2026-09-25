@@ -90,6 +90,9 @@ export interface Vulnerability {
   remediation_owner_id: string | null
   remediation_owner_label: string | null
   status_changed_at: string | null
+  external_ticket_system?: string | null
+  external_ticket_key?: string | null
+  external_ticket_url?: string | null
   is_actively_exploited?: boolean
   has_public_exploit?: boolean
   epss_score?: number | null

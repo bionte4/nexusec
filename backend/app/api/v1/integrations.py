@@ -96,6 +96,7 @@ async def integration_status(
         "ticketing": {
             "enabled": s.ticket_enabled,
             "provider": s.ticket_provider,
+            "min_severity": s.ticket_min_severity,
             "jira_configured": bool(s.jira_base_url and s.jira_api_token),
             "servicenow_configured": bool(
                 s.servicenow_instance_url and s.servicenow_username
