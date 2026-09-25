@@ -494,7 +494,9 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
         ]
         tags = cfg.get("tags") or []
         exclude_tags = cfg.get("exclude_tags") or cfg.get("etags") or ["dos"]
-        rate_limit = int(cfg.get("rate_limit") or 50)
+        rate_limit = int(cfg.get("rate_limit") or 25)
+        concurrency = int(cfg.get("concurrency") or 10)
+        bulk_size = int(cfg.get("bulk_size") or 10)
         timeout = int(cfg.get("timeout_seconds") or 900)
         template_dir = str(cfg.get("template_dir") or "/opt/nuclei-templates/http")
 
@@ -507,6 +509,8 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
                     tags=list(tags),
                     exclude_tags=list(exclude_tags),
                     rate_limit=rate_limit,
+                    concurrency=concurrency,
+                    bulk_size=bulk_size,
                     timeout_seconds=timeout,
                     template_dir=template_dir,
                 )

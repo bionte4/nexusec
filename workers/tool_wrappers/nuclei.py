@@ -27,7 +27,10 @@ class NucleiScanRequest:
     severities: Sequence[str] = ("critical", "high", "medium")
     tags: Sequence[str] = field(default_factory=tuple)
     exclude_tags: Sequence[str] = ("dos",)
-    rate_limit: int = 50
+    rate_limit: int = 25
+    # Cap Go thread growth inside Docker pids_limit / ulimit nproc.
+    concurrency: int = 10
+    bulk_size: int = 10
     timeout_seconds: int = 900
     template_dir: str = _DEFAULT_TEMPLATE_DIR
 
@@ -124,6 +127,14 @@ class NucleiWrapper:
         if rate < 1 or rate > 300:
             raise ToolExecutionError("Nuclei rate_limit must be between 1 and 300")
 
+        concurrency = int(request.concurrency)
+        if concurrency < 1 or concurrency > 50:
+            raise ToolExecutionError("Nuclei concurrency must be between 1 and 50")
+
+        bulk_size = int(request.bulk_size)
+        if bulk_size < 1 or bulk_size > 50:
+            raise ToolExecutionError("Nuclei bulk_size must be between 1 and 50")
+
         template_dir = (request.template_dir or _DEFAULT_TEMPLATE_DIR).strip()
         if not template_dir.startswith("/opt/nuclei-templates"):
             raise ToolExecutionError("Nuclei template_dir must be under /opt/nuclei-templates")
@@ -139,6 +150,10 @@ class NucleiWrapper:
             ",".join(severities),
             "-rate-limit",
             str(rate),
+            "-c",
+            str(concurrency),
+            "-bulk-size",
+            str(bulk_size),
         ]
         if tags:
             argv.extend(["-tags", ",".join(tags)])

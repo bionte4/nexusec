@@ -143,6 +143,9 @@ export function ScansPage() {
           severity: ['critical', 'high', 'medium'],
           tags: ['cve', 'misconfig', 'vuln'],
           exclude_tags: ['dos'],
+          rate_limit: 25,
+          concurrency: 10,
+          bulk_size: 10,
         },
       }))
       return
@@ -187,6 +190,9 @@ export function ScansPage() {
           severity: ['critical', 'high', 'medium'],
           tags: ['cve', 'misconfig', 'vuln'],
           exclude_tags: ['dos'],
+          rate_limit: 25,
+          concurrency: 10,
+          bulk_size: 10,
         },
       }))
       return

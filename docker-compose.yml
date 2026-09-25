@@ -193,8 +193,15 @@ services:
       - /tmp:size=512m,mode=1777
     cap_drop:
       - ALL
-    pids_limit: 256
-    mem_limit: 1g
+    # Nuclei (Go) spawns many OS threads; 256 hits "failed to create new OS thread".
+    # Keep a hard ceiling for DoS isolation while allowing realistic VA scans.
+    pids_limit: 4096
+    mem_limit: 2g
+    ulimits:
+      nproc: 4096
+      nofile:
+        soft: 8192
+        hard: 8192
 
   frontend:
     build:
