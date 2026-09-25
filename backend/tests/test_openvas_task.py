@@ -81,3 +81,35 @@ def test_openvas_wrapper_mock_parses() -> None:
     findings = OpenVasXmlParser().parse(result.stdout)
     assert len(findings) == 3
     assert {f.port for f in findings} == {22, 443, 80}
+
+
+def test_openvas_gmp_without_credentials_fails_closed() -> None:
+    from workers.tool_wrappers.base import ToolExecutionError
+    from workers.tool_wrappers.openvas import (
+        GvmSettings,
+        OpenVasScanRequest,
+        OpenVasWrapper,
+    )
+
+    wrapper = OpenVasWrapper(
+        mode="gmp",
+        gvm=GvmSettings(username="", password="", fallback_mock=False),
+    )
+    with pytest.raises(ToolExecutionError, match="GVM_USERNAME"):
+        wrapper.run(OpenVasScanRequest(targets=["10.0.0.8"], mode="gmp"))
+
+
+def test_openvas_gmp_fallback_mock_when_enabled() -> None:
+    from workers.tool_wrappers.openvas import (
+        GvmSettings,
+        OpenVasScanRequest,
+        OpenVasWrapper,
+    )
+
+    wrapper = OpenVasWrapper(
+        mode="gmp",
+        gvm=GvmSettings(username="", password="", fallback_mock=True),
+    )
+    result = wrapper.run(OpenVasScanRequest(targets=["10.0.0.8"], mode="gmp"))
+    assert result.command[1] == "mock"
+    assert "fell back to mock" in result.stderr

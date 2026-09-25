@@ -1,7 +1,12 @@
-"""Compare two scans by re-parsing last_result fingerprints."""
+"""Compare two scans by re-parsing last_result fingerprints.
+
+Also supports cross-engine comparison for scans that share assets
+(nmap / nuclei / nexusec / openvas).
+"""
 
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 from uuid import UUID
 
@@ -9,15 +14,33 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import ScanStatus
+from app.core.enums import ScanStatus, ScannerEngine
 from app.models.scan import Scan, ScanAsset
 from app.models.vulnerability import Vulnerability
-from app.services.scan_result_utils import fingerprint_map, last_result
+from app.normalization.schema import NormalizedFinding
+from app.services.scan_result_utils import findings_from_scan, fingerprint_map, last_result
 from app.services.scan_service import ScanNotFoundError
+
+_COMPARE_ENGINES = (
+    ScannerEngine.NMAP,
+    ScannerEngine.NUCLEI,
+    ScannerEngine.NEXUSEC,
+    ScannerEngine.OPENVAS,
+)
 
 
 class ScanDiffError(Exception):
     pass
+
+
+def soft_match_key(finding: NormalizedFinding) -> str:
+    """Cross-engine match key: prefer CVE, else port+protocol+normalized title."""
+    if finding.cve_id:
+        return f"cve:{finding.cve_id.upper()}"
+    port = finding.port if finding.port is not None else "-"
+    proto = (finding.protocol or "").lower() or "-"
+    title = re.sub(r"\s+", " ", (finding.name or "").strip().lower())[:80]
+    return f"loc:{port}/{proto}:{title}"
 
 
 class ScanDiffService:
@@ -57,7 +80,6 @@ class ScanDiffService:
         resolved_keys = set(baseline_map) - set(current_map)
         unchanged = set(current_map) & set(baseline_map)
 
-        # Resolve current DB vulnerability ids for new findings when possible
         fps = list(new_keys | resolved_keys | unchanged)
         vuln_by_fp: dict[str, UUID] = {}
         if fps:
@@ -102,6 +124,119 @@ class ScanDiffService:
             },
         }
 
+    async def compare_engines(
+        self,
+        scan_id: UUID,
+        *,
+        organization_id: Optional[UUID] = None,
+    ) -> dict[str, Any]:
+        """Compare latest completed scans per engine that share assets with this scan."""
+        anchor = await self._get_scan(scan_id, organization_id=organization_id)
+        asset_ids = [a.id for a in (anchor.assets or [])]
+        if not asset_ids:
+            raise ScanDiffError("Scan has no linked assets for engine comparison")
+
+        engines_payload: dict[str, Any] = {}
+        key_to_engines: dict[str, set[str]] = {}
+        key_samples: dict[str, dict[str, Any]] = {}
+
+        for engine in _COMPARE_ENGINES:
+            peer = await self._latest_completed_for_engine(
+                organization_id=anchor.organization_id,
+                engine=engine,
+                asset_ids=asset_ids,
+            )
+            if peer is None or not last_result(peer):
+                engines_payload[engine.value] = {
+                    "scan_id": None,
+                    "status": "missing",
+                    "finding_count": 0,
+                    "findings": [],
+                }
+                continue
+
+            findings = findings_from_scan(peer)
+            items: list[dict[str, Any]] = []
+            for finding in findings:
+                key = soft_match_key(finding)
+                sev = (
+                    finding.severity.value
+                    if hasattr(finding.severity, "value")
+                    else str(finding.severity)
+                )
+                row = {
+                    "match_key": key,
+                    "title": finding.name,
+                    "severity": sev,
+                    "cve_id": finding.cve_id,
+                    "port": finding.port,
+                    "protocol": finding.protocol,
+                    "source_tool": finding.source_tool,
+                    "target_hint": finding.target_hint,
+                }
+                items.append(row)
+                key_to_engines.setdefault(key, set()).add(engine.value)
+                key_samples.setdefault(key, row)
+
+            engines_payload[engine.value] = {
+                "scan_id": str(peer.id),
+                "name": peer.name,
+                "status": peer.status.value
+                if hasattr(peer.status, "value")
+                else str(peer.status),
+                "completed_at": peer.completed_at.isoformat()
+                if peer.completed_at
+                else None,
+                "finding_count": len(items),
+                "findings": items[:50],
+            }
+
+        present = [
+            eng
+            for eng, payload in engines_payload.items()
+            if payload.get("scan_id") is not None
+        ]
+        if len(present) < 2:
+            raise ScanDiffError(
+                "Need at least two completed scans (nmap/nuclei/nexusec/openvas) "
+                "on the same asset(s) to compare engines"
+            )
+
+        shared = sorted(k for k, engs in key_to_engines.items() if len(engs) >= 2)
+        unique_by_engine: dict[str, list[dict[str, Any]]] = {e: [] for e in present}
+        for key, engs in key_to_engines.items():
+            if len(engs) != 1:
+                continue
+            only = next(iter(engs))
+            if only in unique_by_engine:
+                unique_by_engine[only].append(key_samples[key])
+
+        return {
+            "anchor_scan_id": str(anchor.id),
+            "asset_ids": [str(a) for a in asset_ids],
+            "method": "soft_match_cve_or_port_title",
+            "engines_compared": present,
+            "engines": engines_payload,
+            "shared": [
+                {
+                    **key_samples[k],
+                    "engines": sorted(key_to_engines[k]),
+                }
+                for k in shared[:40]
+            ],
+            "unique_by_engine": {
+                eng: items[:20] for eng, items in unique_by_engine.items()
+            },
+            "counts": {
+                "engines_with_scans": len(present),
+                "shared_keys": len(shared),
+                "unique": {eng: len(items) for eng, items in unique_by_engine.items()},
+                "per_engine": {
+                    eng: engines_payload[eng]["finding_count"] for eng in present
+                },
+            },
+        }
+
     async def _get_scan(
         self, scan_id: UUID, *, organization_id: Optional[UUID]
     ) -> Scan:
@@ -124,7 +259,6 @@ class ScanDiffService:
         if not asset_ids:
             return None
 
-        # Scans sharing at least one asset + same engine, completed before this one
         stmt = (
             select(Scan)
             .join(ScanAsset, ScanAsset.scan_id == Scan.id)
@@ -141,4 +275,26 @@ class ScanDiffService:
         )
         if organization_id is not None:
             stmt = stmt.where(Scan.organization_id == organization_id)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
+    async def _latest_completed_for_engine(
+        self,
+        *,
+        organization_id: UUID,
+        engine: ScannerEngine,
+        asset_ids: list[UUID],
+    ) -> Optional[Scan]:
+        stmt = (
+            select(Scan)
+            .join(ScanAsset, ScanAsset.scan_id == Scan.id)
+            .options(selectinload(Scan.assets))
+            .where(
+                Scan.organization_id == organization_id,
+                Scan.engine == engine,
+                Scan.status == ScanStatus.COMPLETED,
+                ScanAsset.asset_id.in_(asset_ids),
+            )
+            .order_by(Scan.completed_at.desc().nullslast(), Scan.created_at.desc())
+            .limit(1)
+        )
         return (await self.db.execute(stmt)).scalar_one_or_none()

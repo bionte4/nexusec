@@ -19,4 +19,7 @@ prometheus-fastapi-instrumentator>=7.0.0
 prometheus-client>=0.21.0
 pytest>=8.3.0
 reportlab>=4.2.0
+python-gvm>=24.3.0
+gvm-tools>=24.3.0
+lxml>=5.3.0
 

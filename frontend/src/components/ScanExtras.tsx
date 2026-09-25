@@ -5,6 +5,7 @@ import { useLocale } from '../i18n/locale'
 
 type Evidence = Awaited<ReturnType<typeof api.getScanEvidence>>
 type Diff = Awaited<ReturnType<typeof api.getScanDiff>>
+type EngineCompare = Awaited<ReturnType<typeof api.compareScanEngines>>
 type Discovery = Awaited<ReturnType<typeof api.getDiscoveredHosts>>
 
 interface Props {
@@ -31,6 +32,7 @@ export function ScanExtras({
   const { t } = useLocale()
   const [evidence, setEvidence] = useState<Evidence | null>(null)
   const [diff, setDiff] = useState<Diff | null>(null)
+  const [engineCmp, setEngineCmp] = useState<EngineCompare | null>(null)
   const [discovery, setDiscovery] = useState<Discovery | null>(null)
   const [selectedHosts, setSelectedHosts] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -60,6 +62,23 @@ export function ScanExtras({
       setDiff(await api.getScanDiff(scanId))
     } catch (err) {
       onError(err instanceof ApiError ? err.message : t('scans.diffFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function toggleEngineCompare() {
+    if (engineCmp) {
+      setEngineCmp(null)
+      return
+    }
+    setLoading(true)
+    try {
+      setEngineCmp(await api.compareScanEngines(scanId))
+    } catch (err) {
+      onError(
+        err instanceof ApiError ? err.message : t('scans.compareEnginesFailed'),
+      )
     } finally {
       setLoading(false)
     }
@@ -116,6 +135,7 @@ export function ScanExtras({
   }
 
   const showDiscovery = engine === 'nmap' && status === 'completed'
+  const showCompare = status === 'completed' || status === 'failed'
 
   return (
     <div className="space-y-2">
@@ -128,7 +148,7 @@ export function ScanExtras({
         >
           {evidence ? t('scans.hideEvidence') : t('scans.evidence')}
         </button>
-        {(status === 'completed' || status === 'failed') && (
+        {showCompare ? (
           <button
             type="button"
             disabled={busy || loading}
@@ -137,7 +157,17 @@ export function ScanExtras({
           >
             {diff ? t('scans.hideDiff') : t('scans.diff')}
           </button>
-        )}
+        ) : null}
+        {showCompare ? (
+          <button
+            type="button"
+            disabled={busy || loading}
+            onClick={() => void toggleEngineCompare()}
+            className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent disabled:opacity-50"
+          >
+            {engineCmp ? t('scans.hideCompareEngines') : t('scans.compareEngines')}
+          </button>
+        ) : null}
         {showDiscovery ? (
           <button
             type="button"
@@ -228,6 +258,44 @@ export function ScanExtras({
               − {String(item.title)}
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {engineCmp ? (
+        <div className="space-y-2 rounded-lg border border-surface-700 bg-surface-900/60 p-3 text-[11px]">
+          <div className="text-surface-300">
+            {t('scans.compareEnginesSummary', {
+              engines: engineCmp.engines_compared.join(', '),
+              shared: engineCmp.counts.shared_keys,
+            })}
+          </div>
+          <div className="flex flex-wrap gap-2 font-mono text-[10px] text-surface-400">
+            {Object.entries(engineCmp.counts.per_engine).map(([eng, n]) => (
+              <span key={eng} className="rounded-md border border-surface-600 px-1.5 py-0.5">
+                {eng}: {n}
+              </span>
+            ))}
+          </div>
+          {engineCmp.shared.slice(0, 6).map((item) => (
+            <div key={String(item.match_key)} className="text-accent">
+              ↔ {String(item.title)}
+              {item.cve_id ? ` · ${String(item.cve_id)}` : ''}
+              {' · '}
+              {Array.isArray(item.engines)
+                ? item.engines.join('+')
+                : ''}
+            </div>
+          ))}
+          {Object.entries(engineCmp.unique_by_engine).map(([eng, items]) =>
+            items.slice(0, 3).map((item) => (
+              <div
+                key={`${eng}-${String(item.match_key)}`}
+                className="text-surface-400"
+              >
+                {eng} only · {String(item.title)}
+              </div>
+            )),
+          )}
         </div>
       ) : null}
 

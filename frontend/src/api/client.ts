@@ -439,6 +439,33 @@ export const api = {
     }>(`/api/v1/scans/${id}/diff${q}`)
   },
 
+  compareScanEngines(id: string) {
+    return request<{
+      anchor_scan_id: string
+      asset_ids: string[]
+      method: string
+      engines_compared: string[]
+      engines: Record<
+        string,
+        {
+          scan_id: string | null
+          name?: string
+          status: string
+          finding_count: number
+          findings: Array<Record<string, unknown>>
+        }
+      >
+      shared: Array<Record<string, unknown>>
+      unique_by_engine: Record<string, Array<Record<string, unknown>>>
+      counts: {
+        engines_with_scans: number
+        shared_keys: number
+        unique: Record<string, number>
+        per_engine: Record<string, number>
+      }
+    }>(`/api/v1/scans/${id}/compare-engines`)
+  },
+
   getDiscoveredHosts(scanId: string) {
     return request<{
       scan_id: string

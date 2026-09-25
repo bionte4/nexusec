@@ -199,6 +199,26 @@ async def diff_scan(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.get(
+    "/{scan_id}/compare-engines",
+    summary="Compare latest nmap/nuclei/nexusec/openvas scans on the same asset(s)",
+)
+async def compare_engines(
+    scan_id: uuid.UUID,
+    tenant: RequireTenant,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        return await ScanDiffService(db).compare_engines(
+            scan_id,
+            organization_id=_org_scope(tenant),
+        )
+    except ScanNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ScanDiffError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 class DiscoverAcceptHost(BaseModel):
     ip_address: Optional[str] = None
     hostname: Optional[str] = None

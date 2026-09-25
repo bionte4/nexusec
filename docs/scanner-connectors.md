@@ -240,11 +240,15 @@ Mengintegrasikan hasil **OpenVAS / Greenbone GVM** ke skema finding yang sama. D
 
 ### 6.3 Mode operasi
 
+Lihat panduan live: [`greenbone-gvm.md`](greenbone-gvm.md).
+
 | Mode | Env / config | Perilaku |
 |------|--------------|----------|
-| **mock** (default) | `OPENVAS_MODE=mock` atau `config.openvas_mode` | Generate XML GVM-like untuk tiap target tervalidasi |
+| **mock** (default) | `OPENVAS_MODE=mock` di `.env` **atau** `config.openvas_mode=mock` di form Scans | Generate XML GVM-like untuk tiap target tervalidasi |
 | **import** | `config.report_xml` | Parse laporan XML nyata tanpa menjalankan GVM |
-| **gmp** | `OPENVAS_MODE=gmp` + `gvm-cli` + appliance | Live connector; tanpa setup yang benar → fail closed / fallback mock |
+| **gmp** | `OPENVAS_MODE=gmp` **atau** pilih **gmp** di UI + `GVM_USERNAME`/`GVM_PASSWORD` + `GVM_SOCKET` atau `GVM_HOST` | Live scan lewat `python-gvm`; tanpa kredensial → error (atau mock jika `OPENVAS_GMP_FALLBACK_MOCK=true`) |
+
+Di UI Scans, saat engine **openvas** dipilih, dropdown **OpenVAS mode** mengatur `config.openvas_mode` per job (menimpa default env).
 
 ### 6.4 Worker & parser
 
@@ -332,7 +336,25 @@ Kartu/preset yang sama tersedia di form **New schedule**. Engine yang dapat dija
 
 ---
 
-## 10. Troubleshooting
+## 10. Diff vs Compare engines
+
+| Fitur | Tombol UI | Syarat | Hasil |
+|-------|-----------|--------|-------|
+| **Diff** | Diff | ≥2 scan **engine sama** + aset overlap + completed | New / resolved / unchanged vs baseline waktu |
+| **Compare engines** | Bandingkan engine | ≥2 scan completed di antara `nmap` / `nuclei` / `nexusec` / `openvas` pada aset sama | Hitungan per engine, match bersama (CVE atau port+judul), unik per engine |
+
+Diff temporal memakai fingerprint ketat. Compare engines memakai *soft match* (`CVE` dulu, lalu `port/protocol/title`) karena fingerprint antar-tool biasanya berbeda.
+
+API:
+
+```bash
+GET /api/v1/scans/{scan_id}/diff
+GET /api/v1/scans/{scan_id}/compare-engines
+```
+
+---
+
+## 11. Troubleshooting
 
 | Gejala | Penyebab umum | Tindakan |
 |--------|---------------|----------|
@@ -343,6 +365,8 @@ Kartu/preset yang sama tersedia di form **New schedule**. Engine yang dapat dija
 | Finding kosong padahal completed | Parser mismatch / target unmatched | Cek `config.last_result.ingest` & `normalize/preview` |
 | Judul “Discovery (nmap)” tapi engine nuclei | Nama job bebas diedit user | Percayai field `engine` di metadata baris scan, bukan judul saja |
 | `Organization scope required` | Super-admin tanpa header | Kirim `X-Organization-Id` |
+| Compare engines butuh ≥2 engine | Hanya satu engine completed di aset itu | Jalankan nmap/nuclei/nexusec/openvas pada aset yang sama |
+| Diff: no baseline | Belum ada scan sejenis sebelumnya | Ulangi scan engine yang sama, lalu Diff |
 
 Cek log:
 
@@ -352,7 +376,7 @@ docker compose logs -f scanner-worker
 
 ---
 
-## 11. Referensi kode
+## 12. Referensi kode
 
 | Komponen | Path |
 |----------|------|

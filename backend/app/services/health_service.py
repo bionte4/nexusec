@@ -274,10 +274,21 @@ class WorkerMonitorService:
 
             openvas_mode = (os.getenv("OPENVAS_MODE") or "mock").lower()
             gvm = shutil.which("gvm-cli")
+            gvm_user = (os.getenv("GVM_USERNAME") or os.getenv("GVM_USER") or "").strip()
+            gvm_host = (os.getenv("GVM_HOST") or "").strip()
+            gvm_socket = (os.getenv("GVM_SOCKET") or "").strip()
+            gvm_configured = bool(
+                gvm_user
+                and (os.getenv("GVM_PASSWORD") or "").strip()
+                and (gvm_host or gvm_socket)
+            )
             tools["openvas"] = {
-                "available": openvas_mode == "mock" or gvm is not None,
+                "available": openvas_mode == "mock" or gvm_configured or gvm is not None,
                 "path": gvm,
                 "mode": openvas_mode,
+                "gvm_configured": gvm_configured,
+                "gvm_cli": gvm is not None,
+                "gvm_endpoint": gvm_socket or (f"{gvm_host}:{os.getenv('GVM_PORT') or '9390'}" if gvm_host else None),
             }
             return tools
 

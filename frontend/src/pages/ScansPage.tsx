@@ -588,9 +588,22 @@ export function ScansPage() {
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={form.engine}
-                onChange={(e) =>
-                  setForm({ ...form, engine: e.target.value as ScannerEngine })
-                }
+                onChange={(e) => {
+                  const engine = e.target.value as ScannerEngine
+                  setForm((f) => {
+                    const next = { ...f, engine }
+                    if (engine === 'openvas') {
+                      next.config = {
+                        ...f.config,
+                        openvas_mode:
+                          typeof f.config.openvas_mode === 'string'
+                            ? f.config.openvas_mode
+                            : 'mock',
+                      }
+                    }
+                    return next
+                  })
+                }}
                 className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
               >
                 {ENGINES.map((eng) => (
@@ -613,7 +626,33 @@ export function ScansPage() {
                 ))}
               </select>
             </div>
-            <label className="flex items-center gap-2 text-xs text-surface-300">
+            {form.engine === 'openvas' ? (
+              <div className="space-y-1">
+                <label className="text-[11px] text-surface-400">
+                  {t('scans.openvasMode')}
+                </label>
+                <select
+                  value={
+                    typeof form.config.openvas_mode === 'string'
+                      ? form.config.openvas_mode
+                      : 'mock'
+                  }
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      config: { ...form.config, openvas_mode: e.target.value },
+                    })
+                  }
+                  className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                >
+                  <option value="mock">{t('scans.openvasModeMock')}</option>
+                  <option value="gmp">{t('scans.openvasModeGmp')}</option>
+                </select>
+                <p className="text-[10px] text-surface-500">
+                  {t('scans.openvasModeHint')}
+                </p>
+              </div>
+            ) : null}            <label className="flex items-center gap-2 text-xs text-surface-300">
               <input
                 type="checkbox"
                 checked={form.start_immediately}

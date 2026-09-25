@@ -77,6 +77,11 @@ services:
       DEBUG: ${DEBUG:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
       RUN_MIGRATIONS: "true"
+      OPENVAS_MODE: ${OPENVAS_MODE:-mock}
+      GVM_HOST: ${GVM_HOST:-}
+      GVM_PORT: ${GVM_PORT:-9390}
+      GVM_USERNAME: ${GVM_USERNAME:-}
+      GVM_SOCKET: ${GVM_SOCKET:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -177,6 +182,16 @@ services:
       DEBUG: "false"
       HOME: /tmp
       DISABLE_UPDATE_CHECK: "true"
+      OPENVAS_MODE: ${OPENVAS_MODE:-mock}
+      OPENVAS_GMP_FALLBACK_MOCK: ${OPENVAS_GMP_FALLBACK_MOCK:-false}
+      GVM_HOST: ${GVM_HOST:-}
+      GVM_PORT: ${GVM_PORT:-9390}
+      GVM_USERNAME: ${GVM_USERNAME:-}
+      GVM_PASSWORD: ${GVM_PASSWORD:-}
+      GVM_SOCKET: ${GVM_SOCKET:-}
+      GVM_TLS_VERIFY: ${GVM_TLS_VERIFY:-false}
+      GVM_SCAN_CONFIG: ${GVM_SCAN_CONFIG:-Full and fast}
+      GVM_PORT_LIST: ${GVM_PORT_LIST:-All IANA assigned TCP}
     depends_on:
       postgres:
         condition: service_healthy
