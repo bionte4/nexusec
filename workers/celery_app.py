@@ -33,6 +33,34 @@ celery_app = Celery(
 
 _kev_hours = max(1, int(settings.threat_intel_kev_interval_hours))
 _enrich_hours = max(1, int(settings.threat_intel_enrich_interval_hours))
+_digest_hours = max(1, int(settings.digest_interval_hours))
+
+_common_beat = {
+    "observability-heartbeat": {
+        "task": "observability.heartbeat",
+        "schedule": 60.0,
+    },
+    "scan-schedules-dispatch": {
+        "task": "schedules.dispatch_due",
+        "schedule": 60.0,
+    },
+    "integrations-soc-digest": {
+        "task": "integrations.send_digest",
+        "schedule": float(_digest_hours * 3600),
+    },
+}
+
+_threat_beat = {
+    "threat-intel-kev-sync": {
+        "task": "threat_intel.sync_kev",
+        "schedule": float(_kev_hours * 3600),
+    },
+    "threat-intel-enrich": {
+        "task": "threat_intel.enrich_vulnerabilities",
+        "schedule": float(_enrich_hours * 3600),
+        "kwargs": {"limit": 1000, "fetch_nvd": True, "only_unenriched": False},
+    },
+}
 
 celery_app.conf.update(
     task_serializer="json",
@@ -56,35 +84,8 @@ celery_app.conf.update(
         "schedules.*": {"queue": "default"},
     },
     beat_schedule=(
-        {
-            "threat-intel-kev-sync": {
-                "task": "threat_intel.sync_kev",
-                "schedule": float(_kev_hours * 3600),
-            },
-            "threat-intel-enrich": {
-                "task": "threat_intel.enrich_vulnerabilities",
-                "schedule": float(_enrich_hours * 3600),
-                "kwargs": {"limit": 1000, "fetch_nvd": True, "only_unenriched": False},
-            },
-            "observability-heartbeat": {
-                "task": "observability.heartbeat",
-                "schedule": 60.0,
-            },
-            "scan-schedules-dispatch": {
-                "task": "schedules.dispatch_due",
-                "schedule": 60.0,
-            },
-        }
+        {**_common_beat, **_threat_beat}
         if settings.threat_intel_sync_enabled
-        else {
-            "observability-heartbeat": {
-                "task": "observability.heartbeat",
-                "schedule": 60.0,
-            },
-            "scan-schedules-dispatch": {
-                "task": "schedules.dispatch_due",
-                "schedule": 60.0,
-            },
-        }
+        else dict(_common_beat)
     ),
 )

@@ -357,6 +357,19 @@ Atau **Admin → Alerts → Backfill NIST + SLA**.
 
 Ticketing (Jira/ServiceNow): set `TICKET_ENABLED=true`, kredensial provider, dan opsional `TICKET_MIN_SEVERITY=high`. Di detail finding: **Create / sync ticket**.
 
+### Digest SOC (overdue + Critical/High)
+
+Celery Beat mengirim ringkasan berkala ke webhook yang sama (`DIGEST_INTERVAL_HOURS`, default 24 jam).
+
+```bash
+# Preview
+curl -s -H "$AUTH" "$API/api/v1/integrations/digest/preview" | python3 -m json.tool
+# Kirim sekarang (async Celery)
+curl -s -X POST -H "$AUTH" "$API/api/v1/integrations/digest/send"
+```
+
+UI: **Admin → Alerts → Preview digest / Send SOC digest now**.
+
 ---
 
 ## 8b. Prioritas RBVM (EPSS / SLA / retest)

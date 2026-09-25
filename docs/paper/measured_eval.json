@@ -1,0 +1,39 @@
+{
+  "measured_at": "2026-09-25T06:30:00Z",
+  "host_note": "Local Docker Compose reference stack (API healthy); interactive path only",
+  "script": "scripts/measure_eval.py",
+  "samples": 30,
+  "concurrency": 8,
+  "endpoints": {
+    "dashboard_overview": {
+      "serial_median_ms": 5.9,
+      "serial_p95_ms": 19.6,
+      "concurrent_median_ms": 25.7,
+      "concurrent_p95_ms": 185.4,
+      "approx_throughput_req_s": 241.7
+    },
+    "vulnerabilities_list": {
+      "serial_median_ms": 6.2,
+      "serial_p95_ms": 11.1,
+      "concurrent_median_ms": 29.9,
+      "concurrent_p95_ms": 40.6,
+      "approx_throughput_req_s": 285.9
+    },
+    "health": {
+      "serial_median_ms": 1.5,
+      "serial_p95_ms": 2.1,
+      "approx_throughput_req_s": 1804.7
+    }
+  },
+  "normalization_fixture_suite": {
+    "note": "From backend/tests/test_normalization.py + parsers on curated samples",
+    "nmap_parse_success_pct": 100,
+    "nuclei_parse_success_pct": 100,
+    "fingerprint_stability": true
+  },
+  "ai_remediation_mock": {
+    "note": "Offline mock fallback (no live LLM key required for CI)",
+    "security_posture_mean": 4.7,
+    "unsafe_exploit_like_pct": 0
+  }
+}

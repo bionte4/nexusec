@@ -475,7 +475,7 @@ export const api = {
     })
   },
 
-  getIntegrationsStatus() {
+    getIntegrationsStatus() {
     return request<{
       webhook: {
         enabled: boolean
@@ -488,6 +488,19 @@ export const api = {
       ticketing: Record<string, unknown>
       siem: Record<string, unknown>
     }>('/api/v1/integrations/status')
+  },
+
+  previewDigest() {
+    return request<{ digest: Record<string, unknown> }>(
+      '/api/v1/integrations/digest/preview',
+    )
+  },
+
+  sendDigest(asyncMode = true) {
+    return request<Record<string, unknown>>(
+      `/api/v1/integrations/digest/send?async_mode=${asyncMode}`,
+      { method: 'POST' },
+    )
   },
 
   getWebhookSettings() {

@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     webhook_provider: str = "generic"  # generic | slack | teams
     webhook_min_severity: str = "high"  # high | critical
 
+    # Daily / periodic SOC digest (overdue + critical/high summary)
+    digest_enabled: bool = True
+    digest_interval_hours: int = 24
+    digest_send_when_empty: bool = False
+
     ticket_provider: str = "none"  # none | jira | servicenow
     ticket_enabled: bool = False
     ticket_min_severity: str = "critical"  # critical | high | medium

@@ -241,6 +241,37 @@ export function AdminPage() {
     }
   }
 
+  async function onSendDigest() {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      await api.sendDigest(true)
+      setNotice(t('admin.digestSent'))
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('admin.digestFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onPreviewDigest() {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      const res = await api.previewDigest()
+      const d = res.digest
+      setNotice(
+        `Digest preview — overdue ${String(d.overdue_count)} · crit ${String(d.open_critical)} · high ${String(d.open_high)} · active ${String(d.active_total)}`,
+      )
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('admin.digestFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const tabs: {
     id: Tab
     label: string
@@ -732,6 +763,31 @@ export function AdminPage() {
                 >
                   {busy ? t('admin.creating') : t('admin.backfill')}
                 </button>
+              </div>
+              <div className="mt-6 border-t border-surface-700 pt-4">
+                <h3 className="mb-2 text-sm font-medium">SOC digest</h3>
+                <p className="mb-3 text-xs text-surface-400">
+                  Periodic overdue + Critical/High summary to configured webhooks
+                  (Celery beat).
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onPreviewDigest()}
+                    className="w-full rounded-md border border-surface-600 px-3 py-2 text-sm text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+                  >
+                    {t('admin.digestPreview')}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onSendDigest()}
+                    className="w-full rounded-md border border-surface-600 px-3 py-2 text-sm text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+                  >
+                    {t('admin.digestSend')}
+                  </button>
+                </div>
               </div>
             </div>
           )}

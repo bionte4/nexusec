@@ -277,3 +277,56 @@ async def dispatch_for_vulnerability(
         vuln.external_ticket_url = ticket.get("url")
         await db.flush()
     return {"mode": "sync", **result}
+
+
+@router.get(
+    "/digest/preview",
+    summary="Preview SOC digest (overdue + critical/high) without sending",
+)
+async def preview_digest(
+    tenant: RequireTenant,
+    _: RequireAdmin,
+) -> dict[str, Any]:
+    from workers.db import session_scope
+    from app.services.digest_service import DigestService
+
+    org_id = None if tenant.cross_tenant else tenant.organization_id
+    with session_scope() as session:
+        digest = DigestService(session).build_digest(organization_id=org_id)
+    return {"digest": digest}
+
+
+@router.post(
+    "/digest/send",
+    summary="Send SOC digest now (or enqueue async)",
+)
+async def send_digest(
+    tenant: RequireTenant,
+    _: RequireAdmin,
+    async_mode: bool = True,
+) -> dict[str, Any]:
+    if async_mode:
+        from workers.integration_tasks import send_soc_digest_task
+
+        task = send_soc_digest_task.delay()
+        return {"mode": "async", "task_id": task.id}
+
+    from workers.db import session_scope
+    from app.services.digest_service import DigestService
+
+    org_id = None if tenant.cross_tenant else tenant.organization_id
+    with session_scope() as session:
+        svc = DigestService(session)
+        if org_id is not None:
+            org = session.get(Organization, org_id)
+            digest = svc.build_digest(organization_id=org_id)
+            deliveries = svc.send_digest(
+                digest, org_settings=org.settings if org else None
+            )
+            return {
+                "mode": "sync",
+                "organization_id": str(org_id),
+                "digest": digest,
+                "deliveries": deliveries,
+            }
+        return {"mode": "sync", **svc.run_for_all_orgs()}

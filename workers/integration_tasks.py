@@ -103,3 +103,12 @@ def forward_siem_batch(vulnerability_ids: list[str]) -> dict[str, Any]:
             )
         )
     return {"count": len(outcomes), "results": outcomes}
+
+
+@celery_app.task(name="integrations.send_digest")
+def send_soc_digest_task() -> dict[str, Any]:
+    """Periodic SOC digest: overdue SLA + open Critical/High summary via webhooks."""
+    from app.services.digest_service import DigestService
+
+    with session_scope() as session:
+        return DigestService(session).run_for_all_orgs()
