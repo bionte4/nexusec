@@ -10,6 +10,7 @@ from workers.tool_wrappers.base import (
 )
 from workers.tool_wrappers.nmap import NmapScanRequest, NmapWrapper
 from workers.tool_wrappers.nuclei import NucleiScanRequest, NucleiWrapper
+from workers.tool_wrappers.openvas import OpenVasScanRequest, OpenVasWrapper
 from workers.tool_wrappers.validators import (
     TargetValidationError,
     coerce_host,
@@ -25,6 +26,8 @@ __all__ = [
     "NmapWrapper",
     "NucleiScanRequest",
     "NucleiWrapper",
+    "OpenVasScanRequest",
+    "OpenVasWrapper",
     "ResourceLimits",
     "SecureExecutor",
     "TargetValidationError",

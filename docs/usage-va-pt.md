@@ -27,7 +27,7 @@ Login contoh (setelah bootstrap lokal):
 ```text
 1. Login (Admin / Pentester)
 2. Daftarkan target → Assets (IP / Domain / Cloud)
-3. Buat Scan job (engine: nmap | nuclei | nexusec)
+3. Buat Scan job (engine: nmap | nuclei | nexusec | openvas)
 4. Worker menjalankan tool di sandbox → status completed
 5. Output dinormalisasi → Vulnerabilities (dedup fingerprint)
 6. SOC triage: status, assign, FP analysis, AI remediation
@@ -135,7 +135,8 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 | `nmap` | `discovery` / `va` | Port/service fingerprint; output XML dinormalisasi otomatis |
 | `nuclei` | `va` / `pt` | Template-driven vulnerability checks (JSONL → ingest) |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
-| `openvas` / `other` | — | Belum diimplementasi (placeholder API/UI) |
+| `openvas` | `va` | Greenbone/OpenVAS XML — default `OPENVAS_MODE=mock` (lab/CI); import via `config.report_xml` |
+| `other` | — | Placeholder API/UI |
 
 Jenis `scan_type`: `discovery` · `va` · `pt` · `compliance` · `custom`.
 

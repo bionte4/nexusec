@@ -41,6 +41,10 @@ def _enqueue_scan(scan_id: str, engine: str) -> str:
         from workers.tasks import run_nuclei_scan
 
         return run_nuclei_scan.delay(scan_id).id
+    if engine == "openvas":
+        from workers.tasks import run_openvas_scan
+
+        return run_openvas_scan.delay(scan_id).id
     raise ValueError(f"Unsupported engine for schedule dispatch: {engine}")
 
 
@@ -91,6 +95,7 @@ def dispatch_due_schedules(self) -> dict[str, Any]:
                     ScannerEngine.NMAP,
                     ScannerEngine.NEXUSEC,
                     ScannerEngine.NUCLEI,
+                    ScannerEngine.OPENVAS,
                 }:
                     schedule.last_error = f"Engine {schedule.engine.value} not schedulable"
                     schedule.enabled = False

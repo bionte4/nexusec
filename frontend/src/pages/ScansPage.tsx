@@ -20,13 +20,34 @@ import { useAuth } from '../auth/AuthContext'
 import { ScanExtras } from '../components/ScanExtras'
 import { useLocale } from '../i18n/locale'
 
-const ENGINES: { id: ScannerEngine; ready: boolean }[] = [
-  { id: 'nmap', ready: true },
-  { id: 'nuclei', ready: true },
-  { id: 'nexusec', ready: true },
-  { id: 'openvas', ready: false },
-  { id: 'other', ready: false },
+const ENGINES: { id: ScannerEngine; ready: boolean; label: string; blurb: string }[] = [
+  {
+    id: 'nmap',
+    ready: true,
+    label: 'Nmap',
+    blurb: 'Discovery · port / service fingerprint',
+  },
+  {
+    id: 'nuclei',
+    ready: true,
+    label: 'Nuclei',
+    blurb: 'VA · template-driven checks',
+  },
+  {
+    id: 'nexusec',
+    ready: true,
+    label: 'NexuSec',
+    blurb: 'VA · custom async scanner',
+  },
+  {
+    id: 'openvas',
+    ready: true,
+    label: 'OpenVAS',
+    blurb: 'VA · Greenbone GVM (mock / XML)',
+  },
+  { id: 'other', ready: false, label: 'Other', blurb: 'Coming soon' },
 ]
+
 const SCAN_TYPES: ScanType[] = ['discovery', 'va', 'pt', 'compliance', 'custom']
 const INTERVALS = [
   { minutes: 60, key: 'scans.intervalHourly' as const },
@@ -99,7 +120,7 @@ export function ScansPage() {
     config: {} as Record<string, unknown>,
   })
 
-  type PresetId = 'discovery_nmap' | 'va_nuclei' | 'va_nexusec'
+  type PresetId = 'discovery_nmap' | 'va_nuclei' | 'va_nexusec' | 'va_openvas'
 
   function applyPreset(preset: PresetId) {
     if (preset === 'discovery_nmap') {
@@ -123,6 +144,16 @@ export function ScansPage() {
           tags: ['cve', 'misconfig', 'vuln'],
           exclude_tags: ['dos'],
         },
+      }))
+      return
+    }
+    if (preset === 'va_openvas') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetOpenvasName'),
+        scan_type: 'va',
+        engine: 'openvas',
+        config: { openvas_mode: 'mock' },
       }))
       return
     }
@@ -157,6 +188,16 @@ export function ScansPage() {
           tags: ['cve', 'misconfig', 'vuln'],
           exclude_tags: ['dos'],
         },
+      }))
+      return
+    }
+    if (preset === 'va_openvas') {
+      setScheduleForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetOpenvasName'),
+        scan_type: 'va',
+        engine: 'openvas',
+        config: { openvas_mode: 'mock' },
       }))
       return
     }
@@ -417,6 +458,53 @@ export function ScansPage() {
         </div>
       ) : null}
 
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-surface-200">
+          {t('scans.connectorsTitle')}
+        </h2>
+        <p className="text-xs text-surface-400">{t('scans.connectorsSubtitle')}</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {ENGINES.filter((e) => e.id !== 'other').map((eng) => {
+            const selected = form.engine === eng.id
+            return (
+              <button
+                key={eng.id}
+                type="button"
+                disabled={!eng.ready || !canWrite}
+                onClick={() => {
+                  if (!eng.ready) return
+                  if (eng.id === 'openvas') applyPreset('va_openvas')
+                  else if (eng.id === 'nuclei') applyPreset('va_nuclei')
+                  else if (eng.id === 'nexusec') applyPreset('va_nexusec')
+                  else applyPreset('discovery_nmap')
+                }}
+                className={`rounded-xl border px-4 py-3 text-left transition ${
+                  selected
+                    ? 'border-accent bg-accent/10'
+                    : 'border-surface-600 bg-surface-900/60 hover:border-accent/60'
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-surface-100">
+                    {eng.label}
+                  </span>
+                  <span
+                    className={`rounded-md px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                      eng.ready
+                        ? 'bg-ok/15 text-ok'
+                        : 'bg-surface-700 text-surface-400'
+                    }`}
+                  >
+                    {eng.ready ? t('scans.connectorReady') : t('scans.connectorSoon')}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-surface-400">{eng.blurb}</p>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-3">
         {canWrite ? (
           <form
@@ -448,6 +536,13 @@ export function ScansPage() {
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
               >
                 {t('scans.presetNexusec')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('va_openvas')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetOpenvas')}
               </button>
             </div>
             {hasActiveScans ? (
@@ -659,6 +754,13 @@ export function ScansPage() {
                   className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
                 >
                   {t('scans.presetNexusec')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySchedulePreset('va_openvas')}
+                  className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  {t('scans.presetOpenvas')}
                 </button>
               </div>
               <input

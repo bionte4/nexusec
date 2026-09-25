@@ -79,10 +79,11 @@ Each artifact is parsed by the registry-selected parser and mapped into the unif
 |--------|--------------|-------------------|----------------------------------|---------------------------------|-----------------------------------------------------|
 | Nmap XML | sample suite | **100** | **100** | **100** (open ports / script severity) | **100** (ports 22/445 retained; closed 80 dropped) |
 | Nuclei JSON/JSONL | sample suite (2) | **100** | **100** | **100** | **100** (CVE/CWE/CVSS when present) |
+| OpenVAS / GVM XML | gold fixture (3) | **100** | **100** | **100** | **100** (ports + CVE/CWE when labeled) |
 | Custom JSON + enrich | 1 | **100** | **100** | — | NIST/ISO/PCI/GDPR tags filled by enrich |
 | Fingerprint stability | asset-scoped | — | — | — | Stable 64-hex; differs across assets |
 
-\*Expanded multi-hundred gold corpora remain future work; Table 3 reports the shipped regression fixtures that gate CI.
+\*Expanded multi-hundred gold corpora remain future work; Table 3 reports the shipped regression fixtures under `backend/tests/fixtures/gold/` that gate CI (`test_gold_set_eval.py`).
 
 **Table 4.** Error taxonomy (share of failed or partial mappings)
 

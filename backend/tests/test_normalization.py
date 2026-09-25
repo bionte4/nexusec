@@ -117,7 +117,7 @@ def test_fingerprint_stable_and_asset_scoped() -> None:
 
 def test_registry_has_expected_parsers() -> None:
     reg = build_default_registry()
-    assert set(reg.available()) >= {"nmap", "nuclei", "nexusec"}
+    assert set(reg.available()) >= {"nmap", "nuclei", "nexusec", "openvas"}
 
 
 def test_enrich_adds_defaults() -> None:

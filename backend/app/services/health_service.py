@@ -269,6 +269,16 @@ class WorkerMonitorService:
                     "available": path is not None,
                     "path": path,
                 }
+            # OpenVAS connector works in mock mode without a local binary
+            import os
+
+            openvas_mode = (os.getenv("OPENVAS_MODE") or "mock").lower()
+            gvm = shutil.which("gvm-cli")
+            tools["openvas"] = {
+                "available": openvas_mode == "mock" or gvm is not None,
+                "path": gvm,
+                "mode": openvas_mode,
+            }
             return tools
 
         return await asyncio.to_thread(_which)

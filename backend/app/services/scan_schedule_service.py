@@ -55,6 +55,7 @@ class ScanScheduleService:
             ScannerEngine.NMAP,
             ScannerEngine.NEXUSEC,
             ScannerEngine.NUCLEI,
+            ScannerEngine.OPENVAS,
         }:
             raise ScanValidationError(
                 f"Engine '{payload.engine.value}' is not schedulable yet"
@@ -102,6 +103,7 @@ class ScanScheduleService:
             ScannerEngine.NMAP,
             ScannerEngine.NEXUSEC,
             ScannerEngine.NUCLEI,
+            ScannerEngine.OPENVAS,
         }:
             raise ScanValidationError(
                 f"Engine '{data['engine'].value}' is not schedulable yet"

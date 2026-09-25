@@ -1,0 +1,74 @@
+{
+  "scenario": "B",
+  "description": "Labeled gold set for normalization semantic accuracy (paper Scenario B)",
+  "cases": [
+    {
+      "id": "nmap_open_ports",
+      "parser": "nmap",
+      "fixture": "nmap_sample.xml",
+      "expect": {
+        "min_findings": 2,
+        "must_include_ports": [22, 445],
+        "must_exclude_ports": [80],
+        "source_tool": "nmap",
+        "target_hint": "10.0.0.8",
+        "severity_by_port": {
+          "445": "high"
+        }
+      }
+    },
+    {
+      "id": "nuclei_cve_cwe",
+      "parser": "nuclei",
+      "fixture": "nuclei_sample.jsonl",
+      "expect": {
+        "min_findings": 2,
+        "source_tool": "nuclei",
+        "findings": [
+          {
+            "match_name": "Log4j RCE",
+            "severity": "critical",
+            "cve_id": "CVE-2021-44228",
+            "cwe_id": "CWE-502",
+            "port": 8080
+          },
+          {
+            "match_name": "Admin Panel",
+            "severity": "low",
+            "target_hint": "app.example.com"
+          }
+        ]
+      }
+    },
+    {
+      "id": "openvas_gvm_xml",
+      "parser": "openvas",
+      "fixture": "openvas_sample.xml",
+      "expect": {
+        "min_findings": 3,
+        "source_tool": "openvas",
+        "target_hint": "10.0.0.8",
+        "findings": [
+          {
+            "match_name": "SSH Weak Encryption",
+            "severity": "medium",
+            "port": 22,
+            "cve_id": "CVE-2015-4000",
+            "cwe_id": "CWE-326"
+          },
+          {
+            "match_name": "Vulnerable Cipher Suites",
+            "severity": "high",
+            "port": 443,
+            "cve_id": "CVE-2016-2183"
+          },
+          {
+            "match_name": "HTTP Security Headers",
+            "severity": "low",
+            "port": 80
+          }
+        ]
+      }
+    }
+  ]
+}

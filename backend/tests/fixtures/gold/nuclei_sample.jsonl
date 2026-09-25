@@ -1,0 +1,2 @@
+{"template-id":"CVE-2021-44228","info":{"name":"Log4j RCE","severity":"critical","description":"JNDI lookup","classification":{"cve-id":["CVE-2021-44228"],"cwe-id":["CWE-502"],"cvss-score":10.0},"tags":["cve","rce"]},"host":"10.0.0.8","matched-at":"http://10.0.0.8:8080","port":"8080"}
+{"template-id":"exposed-panel","info":{"name":"Admin Panel","severity":"low","classification":{}},"host":"app.example.com","matched-at":"https://app.example.com/admin"}

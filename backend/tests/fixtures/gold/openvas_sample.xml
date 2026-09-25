@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<report id="gold-openvas" format_id="XML">
+  <name>Gold OpenVAS fixture</name>
+  <results>
+    <result id="r1">
+      <name>SSH Weak Encryption Algorithms Supported</name>
+      <host>10.0.0.8</host>
+      <port>22/tcp</port>
+      <threat>Medium</threat>
+      <severity>5.0</severity>
+      <description>Weak SSH ciphers (CWE-326).</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.900658">
+        <name>SSH Weak Encryption Algorithms Supported</name>
+        <cve>CVE-2015-4000</cve>
+        <xref>URL:https://nvd.nist.gov/ CWE-326</xref>
+      </nvt>
+    </result>
+    <result id="r2">
+      <name>SSL/TLS: Report Vulnerable Cipher Suites for HTTPS</name>
+      <host>10.0.0.8</host>
+      <port>443/tcp</port>
+      <threat>High</threat>
+      <severity>7.5</severity>
+      <description>Vulnerable TLS suites.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.103497">
+        <name>SSL/TLS: Report Vulnerable Cipher Suites for HTTPS</name>
+        <cve>CVE-2016-2183</cve>
+        <xref>CWE-326</xref>
+      </nvt>
+    </result>
+    <result id="r3">
+      <name>HTTP Security Headers Detection</name>
+      <host>10.0.0.8</host>
+      <port>80/tcp</port>
+      <threat>Low</threat>
+      <severity>2.6</severity>
+      <description>Missing security headers.</description>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.108597">
+        <name>HTTP Security Headers Detection</name>
+        <cve>NOCVE</cve>
+      </nvt>
+    </result>
+  </results>
+</report>

@@ -1,0 +1,30 @@
+{
+  "scenario": "C",
+  "description": "Remediation structure gold checks (paper Scenario C — mock path)",
+  "cases": [
+    {
+      "id": "cwe_89_sqli",
+      "cwe_id": "CWE-89",
+      "description": "SQL injection in login form parameter id",
+      "required_sections": ["explanation", "mitigation", "patch", "cwe"]
+    },
+    {
+      "id": "cwe_79_xss",
+      "cwe_id": "CWE-79",
+      "description": "Reflected XSS in search query parameter",
+      "required_sections": ["explanation", "mitigation", "patch", "cwe"]
+    },
+    {
+      "id": "cwe_326_weak_crypto",
+      "cwe_id": "CWE-326",
+      "description": "SSH server allows weak encryption algorithms",
+      "required_sections": ["explanation", "mitigation", "patch", "cwe"]
+    },
+    {
+      "id": "cwe_16_misconfig",
+      "cwe_id": "CWE-16",
+      "description": "Missing HTTP security headers on public web service",
+      "required_sections": ["explanation", "mitigation", "patch", "cwe"]
+    }
+  ]
+}

@@ -21,6 +21,7 @@ from workers.tool_wrappers.base import (
 )
 from workers.tool_wrappers.nmap import DEFAULT_NMAP_FLAGS, NmapScanRequest, NmapWrapper
 from workers.tool_wrappers.nuclei import NucleiScanRequest, NucleiWrapper
+from workers.tool_wrappers.openvas import OpenVasScanRequest, OpenVasWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,7 @@ def _normalize_and_ingest(session: Session, *, scan: Scan, engine: ScannerEngine
         ScannerEngine.NMAP: "nmap",
         ScannerEngine.NUCLEI: "nuclei",
         ScannerEngine.NEXUSEC: "nexusec",
+        ScannerEngine.OPENVAS: "openvas",
     }.get(engine, engine.value)
 
     try:
@@ -609,6 +611,160 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
         }
 
 
+@celery_app.task(name="scans.run_openvas", bind=True, max_retries=0)
+def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
+    """Execute OpenVAS/GVM mock (or imported XML) and ingest normalized findings."""
+    try:
+        scan_uuid = UUID(scan_id)
+    except ValueError:
+        logger.error("Invalid scan_id: %s", scan_id)
+        return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
+
+    with session_scope() as session:
+        scan = (
+            session.query(Scan)
+            .options(selectinload(Scan.assets))
+            .filter(Scan.id == scan_uuid)
+            .one_or_none()
+        )
+        if scan is None:
+            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+
+        scan.celery_task_id = self.request.id
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.RUNNING,
+            progress=5.0,
+            mark_started=True,
+            error_message=None,
+        )
+
+        targets = _targets_from_assets(list(scan.assets))
+        cfg = scan.config or {}
+        report_xml = cfg.get("report_xml")
+        if isinstance(report_xml, str) and report_xml.strip():
+            # Import path — targets optional when XML is provided
+            pass
+        elif not targets:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message="No valid IP/domain targets on linked assets",
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": "no targets"}
+
+        timeout = int(cfg.get("timeout_seconds") or 900)
+        mode = cfg.get("openvas_mode") or cfg.get("mode")
+
+        try:
+            wrapper = OpenVasWrapper()
+            result = wrapper.run(
+                OpenVasScanRequest(
+                    targets=targets or ["127.0.0.1"],
+                    timeout_seconds=timeout,
+                    mode=str(mode) if mode else None,
+                    report_xml=report_xml if isinstance(report_xml, str) else None,
+                )
+            )
+        except ToolNotFoundError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+        except ToolTimeoutError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+        except ToolExecutionError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+
+        stdout = result.stdout
+        truncated = False
+        if len(stdout) > _MAX_RESULT_CHARS:
+            stdout = stdout[:_MAX_RESULT_CHARS]
+            truncated = True
+
+        payload = {
+            "engine": ScannerEngine.OPENVAS.value,
+            "targets": targets,
+            "returncode": result.returncode,
+            "command": list(result.command),
+            "stdout_xml": stdout,
+            "stderr": (result.stderr or "")[:10_000],
+            "truncated": truncated,
+            "finished_at": _utcnow().isoformat(),
+        }
+
+        if result.returncode != 0:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=f"openvas exited with code {result.returncode}",
+                result_payload=payload,
+                mark_completed=True,
+            )
+            return {
+                "scan_id": scan_id,
+                "status": "failed",
+                "returncode": result.returncode,
+            }
+
+        ingest_stats = _normalize_and_ingest(
+            session,
+            scan=scan,
+            engine=ScannerEngine.OPENVAS,
+            raw_output=stdout,
+        )
+        payload["ingest"] = {
+            "inserted": ingest_stats.inserted,
+            "updated": ingest_stats.updated,
+            "skipped": ingest_stats.skipped,
+            "unmatched_targets": ingest_stats.unmatched_targets[:20],
+        }
+
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.COMPLETED,
+            progress=100.0,
+            error_message=None,
+            result_payload=payload,
+            mark_completed=True,
+        )
+        return {
+            "scan_id": scan_id,
+            "status": "completed",
+            "targets": targets,
+            "returncode": 0,
+            "ingest": payload["ingest"],
+        }
+
+
 @celery_app.task(name="scans.run_scan", bind=True)
 def run_scan(self, scan_id: str) -> dict[str, Any]:
     """Dispatcher — routes to engine-specific Celery tasks."""
@@ -642,6 +798,15 @@ def run_scan(self, scan_id: str) -> dict[str, Any]:
 
     if engine == ScannerEngine.NUCLEI:
         async_result = run_nuclei_scan.delay(scan_id)
+        return {
+            "scan_id": scan_id,
+            "status": "delegated",
+            "engine": engine.value,
+            "task_id": async_result.id,
+        }
+
+    if engine == ScannerEngine.OPENVAS:
+        async_result = run_openvas_scan.delay(scan_id)
         return {
             "scan_id": scan_id,
             "status": "delegated",

@@ -56,6 +56,7 @@ class ScanService:
             ScannerEngine.NMAP,
             ScannerEngine.NEXUSEC,
             ScannerEngine.NUCLEI,
+            ScannerEngine.OPENVAS,
         }:
             self._ensure_scan_targets(assets, engine=payload.engine)
 
@@ -104,10 +105,14 @@ class ScanService:
             from workers.tasks import run_nuclei_scan
 
             async_result = run_nuclei_scan.delay(str(scan_id))
+        elif eng == ScannerEngine.OPENVAS:
+            from workers.tasks import run_openvas_scan
+
+            async_result = run_openvas_scan.delay(str(scan_id))
         else:
             raise ScanValidationError(
                 f"Engine '{eng.value}' is not implemented yet "
-                "(supported: nmap, nuclei, nexusec)"
+                "(supported: nmap, nuclei, nexusec, openvas)"
             )
 
         scan.status = ScanStatus.QUEUED
