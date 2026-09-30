@@ -32,9 +32,12 @@ class ScanValidationError(Exception):
 
 
 def _to_read(scan: Scan) -> ScanRead:
+    from workers.tool_wrappers.auth_headers import redact_auth_in_config
+
     asset_ids = [a.id for a in (scan.assets or [])]
     data = ScanRead.model_validate(scan)
-    return data.model_copy(update={"asset_ids": asset_ids})
+    safe_config = redact_auth_in_config(dict(data.config or {}))
+    return data.model_copy(update={"asset_ids": asset_ids, "config": safe_config})
 
 
 class ScanService:
@@ -57,6 +60,7 @@ class ScanService:
             ScannerEngine.NEXUSEC,
             ScannerEngine.NUCLEI,
             ScannerEngine.OPENVAS,
+            ScannerEngine.ZAP,
         }:
             self._ensure_scan_targets(assets, engine=payload.engine)
 
@@ -109,10 +113,14 @@ class ScanService:
             from workers.tasks import run_openvas_scan
 
             async_result = run_openvas_scan.delay(str(scan_id))
+        elif eng == ScannerEngine.ZAP:
+            from workers.tasks import run_zap_scan
+
+            async_result = run_zap_scan.delay(str(scan_id))
         else:
             raise ScanValidationError(
                 f"Engine '{eng.value}' is not implemented yet "
-                "(supported: nmap, nuclei, nexusec, openvas)"
+                "(supported: nmap, nuclei, nexusec, openvas, zap)"
             )
 
         scan.status = ScanStatus.QUEUED
@@ -193,7 +201,7 @@ class ScanService:
         from app.core.enums import AssetType
 
         for asset in assets:
-            if engine == ScannerEngine.NUCLEI:
+            if engine == ScannerEngine.NUCLEI or engine == ScannerEngine.ZAP:
                 if (asset.url or "").strip():
                     continue
             if asset.asset_type == AssetType.IP and asset.ip_address:

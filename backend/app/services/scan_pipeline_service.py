@@ -21,6 +21,7 @@ _VA_ENGINES = frozenset(
         ScannerEngine.NUCLEI,
         ScannerEngine.NEXUSEC,
         ScannerEngine.OPENVAS,
+        ScannerEngine.ZAP,
     }
 )
 
@@ -49,6 +50,8 @@ def default_va_config(engine: ScannerEngine) -> dict[str, Any]:
             "openvas_mode": "mock",
             "openvas_catalogs": ["webserver", "dbserver", "appserver"],
         }
+    if engine == ScannerEngine.ZAP:
+        return {"zap_mode": "mock", "zap_policy": "baseline"}
     return {}
 
 

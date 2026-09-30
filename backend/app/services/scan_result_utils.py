@@ -17,7 +17,7 @@ def last_result(scan: Scan) -> dict[str, Any]:
 
 def extract_raw_output(result: dict[str, Any], engine: ScannerEngine | str) -> Optional[str]:
     eng = engine.value if isinstance(engine, ScannerEngine) else str(engine)
-    for key in ("stdout_xml", "stdout_jsonl", "stdout", "raw"):
+    for key in ("stdout_xml", "stdout_jsonl", "stdout_json", "stdout", "raw"):
         val = result.get(key)
         if isinstance(val, str) and val.strip():
             return val
@@ -39,6 +39,7 @@ def findings_from_scan(scan: Scan) -> list[NormalizedFinding]:
         ScannerEngine.NUCLEI: "nuclei",
         ScannerEngine.NEXUSEC: "nexusec",
         ScannerEngine.OPENVAS: "openvas",
+        ScannerEngine.ZAP: "zap",
     }.get(scan.engine, scan.engine.value)
     try:
         parser = registry.get(parser_name)

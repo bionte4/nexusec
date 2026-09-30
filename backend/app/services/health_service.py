@@ -238,14 +238,51 @@ class HealthService:
             "checks": {c.name: c.to_dict() for c in checks},
         }
 
+    async def check_ai(self) -> CheckResult:
+        """Report LLM key / provider readiness without exposing secrets."""
+        s = self.settings
+        ai_key = bool((s.ai_api_key or "").strip())
+        openai_key = bool((s.openai_api_key or "").strip())
+        anthropic_key = bool((s.anthropic_api_key or "").strip())
+        any_key = ai_key or openai_key or anthropic_key
+        base = (s.ai_base_url or s.openai_api_base or "").strip()
+        model = (s.ai_model or s.openai_model or "").strip()
+        fallback = bool(s.ai_remediation_fallback_mock)
+        if any_key:
+            status = "ok"
+            detail = "LLM credentials configured"
+        elif fallback:
+            status = "degraded"
+            detail = "No LLM API key — mock remediation / FP / chat fallback active"
+        else:
+            status = "unavailable"
+            detail = "No LLM API key and mock fallback disabled"
+        return CheckResult(
+            name="ai",
+            status=status,
+            detail=detail,
+            meta={
+                "ai_api_key_set": ai_key,
+                "openai_api_key_set": openai_key,
+                "anthropic_api_key_set": anthropic_key,
+                "ai_base_url": base or None,
+                "ai_model": model or None,
+                "remediation_enabled": bool(s.ai_remediation_enabled),
+                "remediation_fallback_mock": fallback,
+                "fp_enabled": bool(s.ai_fp_enabled),
+                "soc_chat_enabled": bool(s.ai_soc_chat_enabled),
+            },
+        )
+
     async def detailed(self, db: Optional[AsyncSession] = None) -> dict[str, Any]:
-        postgres, redis_check, celery, docker = await asyncio.gather(
+        postgres, redis_check, celery, docker, ai = await asyncio.gather(
             self.check_postgres(db),
             self.check_redis(),
             self.check_celery(),
             self.check_docker(),
+            self.check_ai(),
         )
-        checks = [postgres, redis_check, celery, docker]
+        checks = [postgres, redis_check, celery, docker, ai]
         return {
             "status": _overall(checks),
             "service": "nexusec-api",
@@ -289,6 +326,13 @@ class WorkerMonitorService:
                 "gvm_configured": gvm_configured,
                 "gvm_cli": gvm is not None,
                 "gvm_endpoint": gvm_socket or (f"{gvm_host}:{os.getenv('GVM_PORT') or '9390'}" if gvm_host else None),
+            }
+            zap_mode = (os.getenv("ZAP_MODE") or "mock").lower()
+            zap_bin = shutil.which("zap.sh") or shutil.which("zaproxy") or shutil.which("zap")
+            tools["zap"] = {
+                "available": zap_mode == "mock" or zap_bin is not None,
+                "path": zap_bin,
+                "mode": zap_mode,
             }
             return tools
 

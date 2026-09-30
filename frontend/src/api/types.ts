@@ -225,7 +225,7 @@ export type ScanStatus =
   | 'failed'
   | 'cancelled'
 export type ScanType = 'va' | 'pt' | 'discovery' | 'compliance' | 'custom'
-export type ScannerEngine = 'nexusec' | 'nmap' | 'nuclei' | 'openvas' | 'other'
+export type ScannerEngine = 'nexusec' | 'nmap' | 'nuclei' | 'openvas' | 'zap' | 'other'
 
 export interface Asset {
   id: string

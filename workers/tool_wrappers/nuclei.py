@@ -50,6 +50,8 @@ class NucleiScanRequest:
     # Prefer template_dirs for multi-pack unauthenticated VA; template_dir kept for compat.
     template_dir: str = ""
     template_dirs: Sequence[str] = field(default_factory=tuple)
+    # Authenticated VA: list of (Header-Name, value) for nuclei -H
+    headers: Sequence[tuple[str, str]] = field(default_factory=tuple)
 
 
 def validate_nuclei_target(value: str) -> str:
@@ -201,6 +203,11 @@ class NucleiWrapper:
             argv.extend(["-tags", ",".join(tags)])
         if exclude_tags:
             argv.extend(["-etags", ",".join(exclude_tags)])
+        for name, value in request.headers:
+            # Already validated by build_auth_headers; still refuse CR/LF.
+            if "\n" in name or "\n" in value or "\r" in name or "\r" in value:
+                raise ToolExecutionError("Nuclei header contains newline")
+            argv.extend(["-H", f"{name}: {value}"])
         for target in targets:
             argv.extend(["-u", target])
         return argv

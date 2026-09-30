@@ -199,6 +199,35 @@ MOCK_FINDING_CATALOGS: dict[str, tuple[MockFinding, ...]] = {
             "Remote management SSH often co-located with app hosts; weak ciphers (CWE-326).",
         ),
     ),
+    "authenticated": (
+        (
+            "1.3.6.1.4.1.25623.1.0.900222",
+            "Authenticated Web Application Session Privilege Check",
+            "Medium",
+            "5.0",
+            "443/tcp",
+            "",
+            "Credentialed session used to probe authenticated application paths (ROE required).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.900223",
+            "Authenticated Database Privilege Enumeration (Mock)",
+            "High",
+            "7.5",
+            "3306/tcp",
+            "",
+            "With DB credentials, enumerate grants / weak roles beyond network exposure (CWE-269).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.900224",
+            "Authenticated Admin Panel Misconfiguration",
+            "Medium",
+            "5.0",
+            "8080/tcp",
+            "",
+            "Logged-in probe of admin surfaces for CSRF tokens missing / verbose errors (CWE-352).",
+        ),
+    ),
 }
 
 DEFAULT_MOCK_CATALOGS: tuple[str, ...] = ("webserver", "dbserver", "appserver")
@@ -222,12 +251,16 @@ def resolve_mock_catalogs(names: Optional[Sequence[str]] = None) -> list[str]:
             "app": "appserver",
             "application": "appserver",
             "appserver": "appserver",
+            "auth": "authenticated",
+            "authenticated": "authenticated",
+            "credentialed": "authenticated",
         }
         mapped = aliases.get(key)
         if mapped is None:
+            allowed = (*DEFAULT_MOCK_CATALOGS, "authenticated")
             raise ToolExecutionError(
                 f"OpenVAS mock catalog not allowlisted: {raw!r} "
-                f"(allowed: {', '.join(DEFAULT_MOCK_CATALOGS)})"
+                f"(allowed: {', '.join(allowed)})"
             )
         if mapped not in seen:
             seen.add(mapped)

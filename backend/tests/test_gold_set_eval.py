@@ -81,7 +81,8 @@ def test_gold_scenario_b_normalization_agreement() -> None:
 
         # Dedup stability: same fingerprint on re-parse
         again = parser.parse(raw)
-        for a, b in zip(findings, again, strict=True):
+        assert len(findings) == len(again)
+        for a, b in zip(findings, again):
             fa = compute_fingerprint(a, asset_key=a.target_hint or "")
             fb = compute_fingerprint(b, asset_key=b.target_hint or "")
             assert fa == fb
@@ -117,3 +118,7 @@ def test_gold_scenario_c_remediation_structure() -> None:
 
 def test_registry_includes_openvas() -> None:
     assert "openvas" in build_default_registry().available()
+
+
+def test_registry_includes_zap() -> None:
+    assert "zap" in build_default_registry().available()

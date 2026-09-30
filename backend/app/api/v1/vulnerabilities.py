@@ -10,12 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import RequireTenant, require_roles
-from app.core.enums import FindingStatus, Severity, UserRole
+from app.core.enums import FindingStatus, ScannerEngine, Severity, UserRole
 from app.models.user import User
+from app.schemas.scan import ScanRead
 from app.schemas.vulnerability import (
     AIFPAnalysisResponse,
     AIRemediationResponse,
     AssignOwnerRequest,
+    BulkAIRemediationRequest,
+    BulkAIRemediationResponse,
     VulnerabilityCommentCreate,
     VulnerabilityCommentRead,
     VulnerabilityListResponse,
@@ -160,6 +163,51 @@ async def list_comments(
         return await service.list_comments(vulnerability_id, organization_id=_org_scope(tenant))
     except VulnerabilityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/bulk-generate-ai-patch",
+    response_model=BulkAIRemediationResponse,
+    summary="Bulk-generate AI remediation for selected findings (max 25)",
+)
+async def bulk_generate_ai_patch(
+    payload: BulkAIRemediationRequest,
+    tenant: RequireTenant,
+    _: RequireRemediationWriter,
+    service: VulnerabilityService = Depends(get_vuln_service),
+) -> BulkAIRemediationResponse:
+    return await service.bulk_generate_ai_patch(
+        list(payload.vulnerability_ids),
+        organization_id=_org_scope(tenant),
+        persist=payload.persist,
+    )
+
+
+@router.post(
+    "/{vulnerability_id}/retest",
+    response_model=ScanRead,
+    summary="Enqueue a verification (retest) scan for this finding's asset",
+)
+async def retest_vulnerability(
+    vulnerability_id: uuid.UUID,
+    tenant: RequireTenant,
+    _: RequireRemediationWriter,
+    engine: ScannerEngine | None = Query(
+        None,
+        description="Override scanner engine (default: finding source_tool or AUTO_RETEST_ENGINE)",
+    ),
+    service: VulnerabilityService = Depends(get_vuln_service),
+) -> ScanRead:
+    try:
+        return await service.enqueue_retest(
+            vulnerability_id,
+            organization_id=_org_scope(tenant),
+            engine=engine,
+        )
+    except VulnerabilityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except VulnerabilityValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

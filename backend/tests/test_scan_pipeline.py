@@ -20,11 +20,19 @@ def test_default_va_config_openvas() -> None:
     assert set(cfg["openvas_catalogs"]) == {"webserver", "dbserver", "appserver"}
 
 
+def test_default_va_config_zap() -> None:
+    cfg = default_va_config(ScannerEngine.ZAP)
+    assert cfg["zap_mode"] == "mock"
+    assert cfg["zap_policy"] == "baseline"
+
+
 def test_pipeline_va_engine_allowlist() -> None:
     allowed = {
         ScannerEngine.NUCLEI,
         ScannerEngine.NEXUSEC,
         ScannerEngine.OPENVAS,
+        ScannerEngine.ZAP,
     }
     assert ScannerEngine.NMAP not in allowed
     assert ScannerEngine.OTHER not in allowed
+    assert ScannerEngine.ZAP in allowed

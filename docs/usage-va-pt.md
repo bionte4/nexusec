@@ -27,7 +27,7 @@ Login contoh (setelah bootstrap lokal):
 ```text
 1. Login (Admin / Pentester)
 2. Daftarkan target → Assets (IP / Domain / Cloud)
-3. Buat Scan job (engine: nmap | nuclei | nexusec | openvas)
+3. Buat Scan job (engine: nmap | nuclei | nexusec | openvas | zap)
 4. Worker menjalankan tool di sandbox → status completed
 5. Output dinormalisasi → Vulnerabilities (dedup fingerprint)
 6. SOC triage: status, assign, FP analysis, AI remediation
@@ -136,6 +136,7 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 | `nuclei` | `va` / `pt` | Template-driven VA; default packs `http`+`ssl`+`network` (tanpa kredensial) |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
 | `openvas` | `va` | Greenbone/OpenVAS — mock catalogs `webserver`/`dbserver`/`appserver`, atau GMP live / `report_xml` |
+| `zap` | `va` | OWASP ZAP DAST — mock JSON alerts (`zap_mode=mock`) atau import `report_json` |
 | `other` | — | Placeholder API/UI |
 
 Jenis `scan_type`: `discovery` · `va` · `pt` · `compliance` · `custom`.
@@ -264,7 +265,34 @@ Cakupan unauthenticated default (tidak butuh login target):
 | Nuclei | `template_dirs` | Packs `http`, `ssl`, `network` |
 | OpenVAS mock | `openvas_catalogs` | `webserver`, `dbserver`, `appserver` |
 
-Authenticated deep scan (credentialed VA) belum termasuk path default ini.
+Authenticated deep scan (credentialed VA) tersedia untuk **Nuclei** (header Bearer/Basic/Cookie) dan **OpenVAS mock** (katalog `authenticated`), dengan gate **`roe_acknowledged=true`**. Rahasia di `config.auth` di-redact pada respons API. Lihat §5.4d dan [`ai-integration.md`](ai-integration.md).
+
+### 5.4d Authenticated VA (ROE + kredensial)
+
+**Wajib:** izin tertulis / Rules of Engagement sebelum memakai kredensial target.
+
+```bash
+curl -s -X POST "$API/api/v1/scans" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{
+    \"name\": \"VA Nuclei authenticated — Staging\",
+    \"scan_type\": \"va\",
+    \"engine\": \"nuclei\",
+    \"asset_ids\": [\"$ASSET_ID\"],
+    \"config\": {
+      \"authenticated\": true,
+      \"roe_acknowledged\": true,
+      \"auth\": { \"type\": \"bearer\", \"token\": \"SHORT_LIVED_TOKEN\" },
+      \"severity\": [\"critical\", \"high\", \"medium\"],
+      \"template_dirs\": [\"/opt/nuclei-templates/http\"]
+    },
+    \"start_immediately\": true
+  }" | python3 -m json.tool
+```
+
+Tipe `auth.type`: `bearer` | `basic` (`username`/`password`) | `header` (`header_name`/`header_value`) | `cookie`.
+
+OpenVAS mock + `authenticated` + ROE menambahkan katalog finding `authenticated`. Di UI Scans: preset **VA · nuclei auth** atau centang **Authenticated VA**.
 
 ### 5.5 Enqueue ulang scan yang sudah dibuat
 
@@ -405,6 +433,16 @@ AI_BASE_URL=https://api.groq.com/openai/v1
 AI_MODEL=llama-3.3-70b-versatile
 ```
 
+Panduan lengkap provider + bulk API: **[`ai-integration.md`](ai-integration.md)**.
+
+Bulk dari UI list (maks 25) atau:
+
+```bash
+curl -s -X POST -H "$AUTH" -H 'Content-Type: application/json' \
+  "$API/api/v1/vulnerabilities/bulk-generate-ai-patch" \
+  -d '{"vulnerability_ids":["'"$VULN_ID"'"],"persist":true}' | python3 -m json.tool
+```
+
 > Output AI **wajib direview manusia** sebelum diterapkan di produksi.
 
 ### 7.6 SOC ChatOps
@@ -469,8 +507,10 @@ UI: **Admin → Alerts → Preview digest / Send SOC digest now**.
 - Enrichment threat intel menambahkan **EPSS** (FIRST.org) ke skor `threat_risk_score` bersama KEV/NVD.
 - Finding baru mendapat `remediation_due_at` sesuai SLA severity (default: Critical 7h, High 14h, Medium 30h, … — lihat `.env` `SLA_DAYS_*`).
 - Dashboard menampilkan **Overdue SLA**; filter: `GET /api/v1/vulnerabilities?overdue=true`.
-- Status → `remediated` otomatis membuat scan verifikasi (auto-retest) bila `AUTO_RETEST_ENABLED=true`.
-
+- Status → `remediated` / `resolved` otomatis membuat scan verifikasi (auto-retest) bila `AUTO_RETEST_ENABLED=true`.
+- Retest manual dari detail finding (UI) atau API:
+  `POST /api/v1/vulnerabilities/{id}/retest?engine=nuclei` (engine opsional; default `source_tool` / `AUTO_RETEST_ENGINE`).
+- Health LLM (tanpa mengekspos secret): `GET /api/v1/health/detailed` → `checks.ai` (`ai_api_key_set`, `ai_base_url`, mock fallback).
 ---
 
 ## 9. Checklist sesi VA

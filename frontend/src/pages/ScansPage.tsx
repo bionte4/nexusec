@@ -45,6 +45,12 @@ const ENGINES: { id: ScannerEngine; ready: boolean; label: string; blurb: string
     label: 'OpenVAS',
     blurb: 'VA · Greenbone GVM (mock / XML)',
   },
+  {
+    id: 'zap',
+    ready: true,
+    label: 'OWASP ZAP',
+    blurb: 'DAST · web app baseline (mock JSON)',
+  },
   { id: 'other', ready: false, label: 'Other', blurb: 'Coming soon' },
 ]
 
@@ -128,7 +134,13 @@ export function ScansPage() {
     raw: '',
   })
 
-  type PresetId = 'discovery_nmap' | 'va_nuclei' | 'va_nexusec' | 'va_openvas'
+  type PresetId =
+    | 'discovery_nmap'
+    | 'va_nuclei'
+    | 'va_nuclei_auth'
+    | 'va_nexusec'
+    | 'va_openvas'
+    | 'va_zap'
 
   function applyPreset(preset: PresetId) {
     if (preset === 'discovery_nmap') {
@@ -172,6 +184,27 @@ export function ScansPage() {
       }))
       return
     }
+    if (preset === 'va_nuclei_auth') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetNucleiAuthName'),
+        scan_type: 'va',
+        engine: 'nuclei',
+        config: {
+          severity: ['critical', 'high', 'medium'],
+          tags: ['cve', 'misconfig', 'vuln', 'exposure', 'auth'],
+          exclude_tags: ['dos'],
+          rate_limit: 15,
+          concurrency: 8,
+          bulk_size: 8,
+          template_dirs: ['/opt/nuclei-templates/http'],
+          authenticated: true,
+          roe_acknowledged: false,
+          auth: { type: 'bearer', token: '' },
+        },
+      }))
+      return
+    }
     if (preset === 'va_openvas') {
       setForm((f) => ({
         ...f,
@@ -181,6 +214,19 @@ export function ScansPage() {
         config: {
           openvas_mode: 'mock',
           openvas_catalogs: ['webserver', 'dbserver', 'appserver'],
+        },
+      }))
+      return
+    }
+    if (preset === 'va_zap') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetZapName'),
+        scan_type: 'va',
+        engine: 'zap',
+        config: {
+          zap_mode: 'mock',
+          zap_policy: 'baseline',
         },
       }))
       return
@@ -245,6 +291,19 @@ export function ScansPage() {
         config: {
           openvas_mode: 'mock',
           openvas_catalogs: ['webserver', 'dbserver', 'appserver'],
+        },
+      }))
+      return
+    }
+    if (preset === 'va_zap') {
+      setScheduleForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetZapName'),
+        scan_type: 'va',
+        engine: 'zap',
+        config: {
+          zap_mode: 'mock',
+          zap_policy: 'baseline',
         },
       }))
       return
@@ -565,7 +624,7 @@ export function ScansPage() {
           {t('scans.connectorsTitle')}
         </h2>
         <p className="text-xs text-surface-400">{t('scans.connectorsSubtitle')}</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {ENGINES.filter((e) => e.id !== 'other').map((eng) => {
             const selected = form.engine === eng.id
             return (
@@ -576,6 +635,7 @@ export function ScansPage() {
                 onClick={() => {
                   if (!eng.ready) return
                   if (eng.id === 'openvas') applyPreset('va_openvas')
+                  else if (eng.id === 'zap') applyPreset('va_zap')
                   else if (eng.id === 'nuclei') applyPreset('va_nuclei')
                   else if (eng.id === 'nexusec') applyPreset('va_nexusec')
                   else applyPreset('discovery_nmap')
@@ -634,6 +694,13 @@ export function ScansPage() {
               </button>
               <button
                 type="button"
+                onClick={() => applyPreset('va_nuclei_auth')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetNucleiAuth')}
+              </button>
+              <button
+                type="button"
                 onClick={() => applyPreset('va_nexusec')}
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
               >
@@ -645,6 +712,13 @@ export function ScansPage() {
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
               >
                 {t('scans.presetOpenvas')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('va_zap')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetZap')}
               </button>
             </div>
             {hasActiveScans ? (
@@ -695,6 +769,19 @@ export function ScansPage() {
                           typeof f.config.openvas_mode === 'string'
                             ? f.config.openvas_mode
                             : 'mock',
+                      }
+                    }
+                    if (engine === 'zap') {
+                      next.config = {
+                        ...f.config,
+                        zap_mode:
+                          typeof f.config.zap_mode === 'string'
+                            ? f.config.zap_mode
+                            : 'mock',
+                        zap_policy:
+                          typeof f.config.zap_policy === 'string'
+                            ? f.config.zap_policy
+                            : 'baseline',
                       }
                     }
                     return next
@@ -797,6 +884,259 @@ export function ScansPage() {
                 </div>
               </div>
             ) : null}
+            {form.engine === 'zap' ? (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-surface-400">
+                    {t('scans.zapMode')}
+                  </label>
+                  <select
+                    value={
+                      typeof form.config.zap_mode === 'string'
+                        ? form.config.zap_mode
+                        : 'mock'
+                    }
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: { ...form.config, zap_mode: e.target.value },
+                      })
+                    }
+                    className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    <option value="mock">{t('scans.zapModeMock')}</option>
+                  </select>
+                  <p className="text-[10px] text-surface-500">
+                    {t('scans.zapModeHint')}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-surface-400">
+                    {t('scans.zapPolicy')}
+                  </label>
+                  <select
+                    value={
+                      typeof form.config.zap_policy === 'string'
+                        ? form.config.zap_policy
+                        : 'baseline'
+                    }
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: { ...form.config, zap_policy: e.target.value },
+                      })
+                    }
+                    className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    <option value="baseline">baseline</option>
+                    <option value="full">full</option>
+                  </select>
+                </div>
+              </div>
+            ) : null}
+            {form.engine === 'nuclei' ||
+            form.engine === 'openvas' ||
+            form.engine === 'zap' ? (
+              <div className="space-y-2 rounded-lg border border-surface-700 p-3">
+                <label className="flex items-center gap-2 text-xs text-surface-300">
+                  <input
+                    type="checkbox"
+                    checked={form.config.authenticated === true}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          authenticated: e.target.checked,
+                          auth:
+                            typeof form.config.auth === 'object' &&
+                            form.config.auth
+                              ? form.config.auth
+                              : { type: 'bearer', token: '' },
+                        },
+                      })
+                    }
+                  />
+                  {t('scans.authenticatedVa')}
+                </label>
+                {form.config.authenticated === true ? (
+                  <>
+                    <label className="flex items-start gap-2 text-xs text-warn">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={form.config.roe_acknowledged === true}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            config: {
+                              ...form.config,
+                              roe_acknowledged: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      <span>{t('scans.roeAck')}</span>
+                    </label>
+                    {form.engine === 'nuclei' ? (
+                      <div className="grid gap-2">
+                        <label className="space-y-1 text-[11px] text-surface-400">
+                          {t('scans.authType')}
+                          <select
+                            value={
+                              typeof form.config.auth === 'object' &&
+                              form.config.auth &&
+                              typeof (form.config.auth as { type?: string })
+                                .type === 'string'
+                                ? (form.config.auth as { type: string }).type
+                                : 'bearer'
+                            }
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                config: {
+                                  ...form.config,
+                                  auth: {
+                                    ...(typeof form.config.auth === 'object' &&
+                                    form.config.auth
+                                      ? (form.config.auth as Record<
+                                          string,
+                                          unknown
+                                        >)
+                                      : {}),
+                                    type: e.target.value,
+                                  },
+                                },
+                              })
+                            }
+                            className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                          >
+                            <option value="bearer">bearer</option>
+                            <option value="basic">basic</option>
+                            <option value="header">header</option>
+                            <option value="cookie">cookie</option>
+                          </select>
+                        </label>
+                        {(typeof form.config.auth === 'object' &&
+                        form.config.auth &&
+                        (form.config.auth as { type?: string }).type ===
+                          'basic'
+                          ? true
+                          : false) ? (
+                          <>
+                            <input
+                              type="text"
+                              placeholder={t('scans.authUsername')}
+                              value={
+                                typeof form.config.auth === 'object' &&
+                                form.config.auth &&
+                                typeof (form.config.auth as { username?: string })
+                                  .username === 'string'
+                                  ? (form.config.auth as { username: string })
+                                      .username
+                                  : ''
+                              }
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  config: {
+                                    ...form.config,
+                                    auth: {
+                                      ...(form.config.auth as object),
+                                      type: 'basic',
+                                      username: e.target.value,
+                                    },
+                                  },
+                                })
+                              }
+                              className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                            />
+                            <input
+                              type="password"
+                              placeholder={t('scans.authPassword')}
+                              autoComplete="off"
+                              value={
+                                typeof form.config.auth === 'object' &&
+                                form.config.auth &&
+                                typeof (form.config.auth as { password?: string })
+                                  .password === 'string'
+                                  ? (form.config.auth as { password: string })
+                                      .password
+                                  : ''
+                              }
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  config: {
+                                    ...form.config,
+                                    auth: {
+                                      ...(form.config.auth as object),
+                                      type: 'basic',
+                                      password: e.target.value,
+                                    },
+                                  },
+                                })
+                              }
+                              className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                            />
+                          </>
+                        ) : (
+                          <input
+                            type="password"
+                            placeholder={t('scans.authSecret')}
+                            autoComplete="off"
+                            value={
+                              typeof form.config.auth === 'object' &&
+                              form.config.auth
+                                ? String(
+                                    (form.config.auth as { token?: string })
+                                      .token ||
+                                      (form.config.auth as { cookie?: string })
+                                        .cookie ||
+                                      (form.config.auth as {
+                                        header_value?: string
+                                      }).header_value ||
+                                      '',
+                                  )
+                                : ''
+                            }
+                            onChange={(e) => {
+                              const authObj: Record<string, unknown> =
+                                typeof form.config.auth === 'object' &&
+                                form.config.auth !== null
+                                  ? {
+                                      ...(form.config.auth as Record<
+                                        string,
+                                        unknown
+                                      >),
+                                    }
+                                  : { type: 'bearer' }
+                              const typ = String(authObj.type || 'bearer')
+                              if (typ === 'cookie') authObj.cookie = e.target.value
+                              else if (typ === 'header')
+                                authObj.header_value = e.target.value
+                              else authObj.token = e.target.value
+                              setForm({
+                                ...form,
+                                config: { ...form.config, auth: authObj },
+                              })
+                            }}
+                            className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                          />
+                        )}
+                        <p className="text-[10px] text-surface-500">
+                          {t('scans.authHint')}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-surface-500">
+                        {t('scans.authOpenvasHint')}
+                      </p>
+                    )}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             <label className="flex items-center gap-2 text-xs text-surface-300">
               <input
                 type="checkbox"
@@ -831,6 +1171,7 @@ export function ScansPage() {
                 <option value="nuclei">nuclei</option>
                 <option value="nexusec">nexusec</option>
                 <option value="openvas">openvas</option>
+                <option value="zap">zap</option>
               </select>
               <button
                 type="button"
@@ -974,6 +1315,7 @@ export function ScansPage() {
               <option value="nuclei">nuclei JSONL</option>
               <option value="nexusec">nexusec JSON</option>
               <option value="openvas">openvas / GVM XML</option>
+              <option value="zap">zap JSON</option>
             </select>
             <textarea
               required
@@ -1046,6 +1388,13 @@ export function ScansPage() {
                   className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
                 >
                   {t('scans.presetOpenvas')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySchedulePreset('va_zap')}
+                  className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  {t('scans.presetZap')}
                 </button>
               </div>
               <input

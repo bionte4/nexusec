@@ -318,6 +318,41 @@ export function VulnerabilitiesPage() {
     }
   }
 
+  async function applyBulkAiRemediation() {
+    if (selected.size === 0) return
+    const ids = Array.from(selected).slice(0, 25)
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      if (usingMock || token === 'demo') {
+        setItems((prev) =>
+          prev.map((v) =>
+            ids.includes(v.id)
+              ? {
+                  ...v,
+                  remediation:
+                    `## Why this vulnerability occurs\n\nDemo bulk guidance for '${v.title}'.\n\n` +
+                    `## Remediation steps\n\n1. Confirm.\n2. Patch.\n3. Re-scan.\n`,
+                }
+              : v,
+          ),
+        )
+        setNotice(t('vulns.bulkAiDone', { ok: ids.length, fail: 0 }))
+      } else {
+        const resp = await api.bulkGenerateAiPatch(ids, true)
+        setNotice(
+          t('vulns.bulkAiDone', { ok: resp.succeeded, fail: resp.failed }),
+        )
+      }
+      setSelected(new Set())
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('vulns.bulkAiFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function exportCsv() {
     const header = [
       'id',
@@ -669,6 +704,14 @@ export function VulnerabilitiesPage() {
             className="rounded-lg border border-surface-600 px-3 py-2 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
           >
             {t('vulns.applyOwner')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void applyBulkAiRemediation()}
+            className="rounded-lg border border-accent/50 px-3 py-2 text-xs text-accent hover:bg-accent/10 disabled:opacity-50"
+          >
+            {t('vulns.bulkAiRemediation')}
           </button>
         </div>
       ) : null}

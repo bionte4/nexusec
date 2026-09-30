@@ -50,7 +50,8 @@ API docs: http://localhost:8000/docs
 
 ## Usage guides
 
-- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas), normalize, triage, compliance reports
+- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas), authenticated VA + ROE, normalize, triage, compliance reports
+- **AI integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — Groq/OpenRouter/OpenAI/Ollama keys, remediation + bulk, FP, ChatOps
 - **Scanner connectors (UI cards):** [`docs/scanner-connectors.md`](docs/scanner-connectors.md) — Nmap, Nuclei, NexuSec, OpenVAS presets, unauthenticated catalogs (`webserver` / `dbserver` / `appserver`), worker config, troubleshooting
 - **Greenbone live GMP:** [`docs/greenbone-gvm.md`](docs/greenbone-gvm.md) — connect `python-gvm` to an external GVM appliance
 - Data model: [`docs/data-model.md`](docs/data-model.md)

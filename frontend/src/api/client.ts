@@ -158,6 +158,31 @@ export const api = {
     )
   },
 
+  retestVulnerability(id: string, engine?: ScannerEngine) {
+    const q = engine ? `?engine=${encodeURIComponent(engine)}` : ''
+    return request<Scan>(`/api/v1/vulnerabilities/${id}/retest${q}`, {
+      method: 'POST',
+    })
+  },
+
+  bulkGenerateAiPatch(vulnerability_ids: string[], persist = true) {
+    return request<{
+      requested: number
+      succeeded: number
+      failed: number
+      items: Array<{
+        vulnerability_id: string
+        ok: boolean
+        provider?: string | null
+        model?: string | null
+        error?: string | null
+      }>
+    }>('/api/v1/vulnerabilities/bulk-generate-ai-patch', {
+      method: 'POST',
+      body: JSON.stringify({ vulnerability_ids, persist }),
+    })
+  },
+
   socChat(query: string) {
     return request<SocChatResponse>('/api/v1/soc/chat', {
       method: 'POST',

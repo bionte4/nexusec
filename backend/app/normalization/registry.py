@@ -29,6 +29,7 @@ def build_default_registry() -> ParserRegistry:
     from app.normalization.parsers.nmap_xml import NmapXmlParser
     from app.normalization.parsers.nuclei_json import NucleiJsonParser
     from app.normalization.parsers.openvas_xml import OpenVasXmlParser
+    from app.normalization.parsers.zap_json import ZapJsonParser
 
     registry = ParserRegistry()
     for parser in (
@@ -36,6 +37,7 @@ def build_default_registry() -> ParserRegistry:
         NucleiJsonParser(),
         CustomJsonParser(),
         OpenVasXmlParser(),
+        ZapJsonParser(),
     ):
         registry.register(parser)
     return registry

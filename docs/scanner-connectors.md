@@ -16,6 +16,7 @@ Di halaman **Scans**, bagian atas form menampilkan kartu engine siap pakai:
 | **Nuclei** | `nuclei` | Ready | VA · template-driven checks |
 | **NexuSec** | `nexusec` | Ready | VA · custom async scanner |
 | **OpenVAS** | `openvas` | Ready | VA · Greenbone GVM (mock / XML) |
+| **OWASP ZAP** | `zap` | Ready | DAST · web baseline (mock JSON) |
 
 **Cara kerja di UI**
 
@@ -32,6 +33,7 @@ Preset cepat di form (chip) setara dengan kartu:
 - `VA · nuclei`
 - `VA · nexusec`
 - `VA · openvas`
+- `DAST · zap`
 
 Jadwal berulang (**Schedules**) memakai preset yang sama.
 
@@ -59,7 +61,9 @@ UI / API  →  Scan row (status queued)
 
 **Health**
 
-`GET /api/v1/health/detailed` melaporkan ketersediaan binary (`nmap`, `nuclei`) dan status connector OpenVAS (`mode` mock vs `gvm-cli`).
+`GET /api/v1/health/detailed` melaporkan ketersediaan binary (`nmap`, `nuclei`), status connector OpenVAS / ZAP (`mode` mock), dan status LLM (`ai` check — key set vs mock fallback, tanpa mengekspos secret).
+
+`GET /api/v1/health/workers` menambahkan `tools.zap` (mode + path binary bila ada).
 
 ---
 
@@ -91,6 +95,8 @@ Flag default: `-sV -Pn -T3`. Hanya flag allowlist yang diterima lewat `config.nm
 - `nmap_scripts`: NSE aman (`banner`, `http-title`, `http-server-header`, `ssl-cert`, `mysql-info`, …) — no brute-force
 
 Preset port lain: `web`, `db`. Kosongkan `nmap_scripts: []` jika hanya ingin fingerprint port tanpa NSE.
+
+**Authenticated VA (Nuclei / OpenVAS mock):** set `authenticated=true` + `roe_acknowledged=true` + `auth` (bearer/basic/header/cookie). Secrets di-redact saat `ScanRead`. Detail: [`usage-va-pt.md`](usage-va-pt.md) §5.4d, AI keys: [`ai-integration.md`](ai-integration.md).
 
 ### 3.4 Hasil normalisasi
 
@@ -325,6 +331,33 @@ POST /api/v1/normalize/preview
 
 ---
 
+## 6b. OWASP ZAP — DAST · web baseline (mock JSON)
+
+### Tujuan
+
+DAST ringan untuk aset URL/HTTP. Default **mock** menghasilkan alert JSON gaya ZAP (XSS, missing headers, dll.) tanpa daemon `zaproxy`. Cocok lab/CI; import JSON ZAP nyata via `report_json` / Import raw.
+
+### Config tipikal
+
+```json
+{
+  "zap_mode": "mock",
+  "zap_policy": "baseline"
+}
+```
+
+Env: `ZAP_MODE=mock` (default). Mode `daemon` belum diaktifkan di build ini.
+
+### Worker
+
+- Task: `scans.run_zap`
+- Wrapper: `workers/tool_wrappers/zap.py`
+- Parser: `ZapJsonParser` (`zap`)
+
+Asset wajib punya `url` (atau domain yang bisa di-URL-kan), sama seperti Nuclei.
+
+---
+
 ## 7. Memilih connector — panduan singkat
 
 | Kebutuhan | Pilih | Alasan |
@@ -334,21 +367,22 @@ POST /api/v1/normalize/preview
 | Demo / regressi internal | **NexuSec** | Tanpa binary pihak ketiga |
 | Lab tanpa Greenbone / import report | **OpenVAS** | Mock atau `report_xml` |
 | Appliance Greenbone produksi | **OpenVAS** + GMP | Hanya setelah `gvm-cli` & kredensial aman |
+| DAST web / missing headers / XSS | **ZAP** | Mock JSON atau import laporan ZAP |
 
-Urutan VA yang disarankan: **Nmap (discovery) → Nuclei / OpenVAS / NexuSec (VA) → triage SOC**.
+Urutan VA yang disarankan: **Nmap (discovery) → Nuclei / OpenVAS / ZAP / NexuSec (VA) → triage SOC**.
 
 ### Pipeline satu klik
 
 `POST /api/v1/scans/pipeline` membuat dua job berantai:
 
 1. Discovery (`nmap`) langsung di-queue  
-2. VA (`nuclei` | `nexusec` | `openvas`) menunggu sampai discovery **completed**, lalu di-enqueue otomatis  
+2. VA (`nuclei` | `nexusec` | `openvas` | `zap`) menunggu sampai discovery **completed**, lalu di-enqueue otomatis  
 
 Di UI Scans: pilih aset → pilih VA engine → **Start discovery → VA**.
 
 ### Import laporan
 
-`POST /api/v1/scans/import-report` menerima raw XML/JSONL, membuat scan `completed`, lalu ingest finding (batas 2MB).
+`POST /api/v1/scans/import-report` menerima raw XML/JSONL/JSON, membuat scan `completed`, lalu ingest finding (batas 2MB).
 
 ---
 
@@ -362,6 +396,7 @@ Semua connector masuk registry yang sama (`build_default_registry`):
 | `nuclei` | Nuclei JSON / JSONL |
 | `nexusec` | Custom JSON findings |
 | `openvas` | OpenVAS / GVM report XML |
+| `zap` | OWASP ZAP JSON (site.alerts) |
 
 Fingerprint stabil per `(asset, vuln_id/tool fields)` mencegah duplikat saat re-scan. Gold-set regresi: `backend/tests/fixtures/gold/` + `test_gold_set_eval.py`.
 
@@ -369,7 +404,7 @@ Fingerprint stabil per `(asset, vuln_id/tool fields)` mencegah duplikat saat re-
 
 ## 9. Schedules
 
-Kartu/preset yang sama tersedia di form **New schedule**. Engine yang dapat dijadwalkan: `nmap`, `nuclei`, `nexusec`, `openvas`. Beat task `schedules.dispatch_due` membuat Scan baru dan enqueue ke queue `scans`.
+Kartu/preset yang sama tersedia di form **New schedule**. Engine yang dapat dijadwalkan: `nmap`, `nuclei`, `nexusec`, `openvas`, `zap`. Beat task `schedules.dispatch_due` membuat Scan baru dan enqueue ke queue `scans`.
 
 ---
 

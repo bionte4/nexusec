@@ -22,6 +22,7 @@ from workers.tool_wrappers.base import (
 from workers.tool_wrappers.nmap import DEFAULT_NMAP_FLAGS, NmapScanRequest, NmapWrapper
 from workers.tool_wrappers.nuclei import NucleiScanRequest, NucleiWrapper
 from workers.tool_wrappers.openvas import OpenVasScanRequest, OpenVasWrapper
+from workers.tool_wrappers.zap import ZapScanRequest, ZapWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,7 @@ def _normalize_and_ingest(session: Session, *, scan: Scan, engine: ScannerEngine
         ScannerEngine.NUCLEI: "nuclei",
         ScannerEngine.NEXUSEC: "nexusec",
         ScannerEngine.OPENVAS: "openvas",
+        ScannerEngine.ZAP: "zap",
     }.get(engine, engine.value)
 
     try:
@@ -206,6 +208,8 @@ def _maybe_enqueue_pipeline_next(session: Session, scan: Scan) -> Optional[str]:
             async_result = run_nuclei_scan.delay(str(follow.id))
         elif engine == ScannerEngine.OPENVAS:
             async_result = run_openvas_scan.delay(str(follow.id))
+        elif engine == ScannerEngine.ZAP:
+            async_result = run_zap_scan.delay(str(follow.id))
         else:
             logger.warning("Pipeline next engine unsupported: %s", engine)
             return None
@@ -581,6 +585,33 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
             or "/opt/nuclei-templates/http,/opt/nuclei-templates/ssl,/opt/nuclei-templates/network"
         )
 
+        headers: list[tuple[str, str]] = []
+        try:
+            from workers.tool_wrappers.auth_headers import (
+                assert_roe_acknowledged,
+                build_auth_headers,
+                require_roe_for_authenticated,
+            )
+
+            if require_roe_for_authenticated(cfg):
+                assert_roe_acknowledged(cfg)
+                headers = build_auth_headers(cfg.get("auth") if isinstance(cfg.get("auth"), dict) else None)
+                if not headers:
+                    raise ToolExecutionError(
+                        "Authenticated VA enabled but config.auth is empty "
+                        "(set type bearer|basic|header|cookie)"
+                    )
+        except ToolExecutionError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+
         try:
             wrapper = NucleiWrapper()
             result = wrapper.run(
@@ -595,6 +626,7 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
                     timeout_seconds=timeout,
                     template_dir=template_dir,
                     template_dirs=list(template_dirs) if template_dirs else (),
+                    headers=headers,
                 )
             )
         except ToolNotFoundError as exc:
@@ -756,6 +788,30 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
             catalogs = None
 
         try:
+            from workers.tool_wrappers.auth_headers import (
+                assert_roe_acknowledged,
+                require_roe_for_authenticated,
+            )
+
+            if require_roe_for_authenticated(cfg):
+                assert_roe_acknowledged(cfg)
+                # Credentialed OpenVAS mock: include authenticated catalog findings
+                cats = list(catalogs) if catalogs else ["webserver", "dbserver", "appserver"]
+                if "authenticated" not in cats:
+                    cats.append("authenticated")
+                catalogs = cats
+        except ToolExecutionError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+
+        try:
             wrapper = OpenVasWrapper()
             result = wrapper.run(
                 OpenVasScanRequest(
@@ -865,6 +921,161 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
         return out
 
 
+@celery_app.task(name="scans.run_zap", bind=True, max_retries=0)
+def run_zap_scan(self, scan_id: str) -> dict[str, Any]:
+    """Execute OWASP ZAP mock (or imported JSON) and ingest normalized findings."""
+    try:
+        scan_uuid = UUID(scan_id)
+    except ValueError:
+        logger.error("Invalid scan_id: %s", scan_id)
+        return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
+
+    with session_scope() as session:
+        scan = (
+            session.query(Scan)
+            .options(selectinload(Scan.assets))
+            .filter(Scan.id == scan_uuid)
+            .one_or_none()
+        )
+        if scan is None:
+            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+
+        scan.celery_task_id = self.request.id
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.RUNNING,
+            progress=5.0,
+            mark_started=True,
+            error_message=None,
+        )
+
+        targets = _nuclei_targets_from_assets(list(scan.assets))
+        cfg = scan.config or {}
+        report_json = cfg.get("report_json")
+        if isinstance(report_json, str) and report_json.strip():
+            pass
+        elif not targets:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message="No valid URL/domain targets on linked assets",
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": "no targets"}
+
+        timeout = int(cfg.get("timeout_seconds") or 900)
+        mode = cfg.get("zap_mode") or cfg.get("mode")
+        policy = str(cfg.get("zap_policy") or cfg.get("scan_policy") or "baseline")
+
+        try:
+            wrapper = ZapWrapper()
+            result = wrapper.run(
+                ZapScanRequest(
+                    targets=targets or ["https://example.com"],
+                    timeout_seconds=timeout,
+                    mode=str(mode) if mode else None,
+                    report_json=report_json if isinstance(report_json, str) else None,
+                    scan_policy=policy,
+                )
+            )
+        except ToolNotFoundError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+        except ToolTimeoutError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+        except ToolExecutionError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+
+        stdout = result.stdout
+        truncated = False
+        if len(stdout) > _MAX_RESULT_CHARS:
+            stdout = stdout[:_MAX_RESULT_CHARS]
+            truncated = True
+
+        payload = {
+            "engine": ScannerEngine.ZAP.value,
+            "targets": targets,
+            "returncode": result.returncode,
+            "command": list(result.command),
+            "stdout_json": stdout,
+            "stderr": (result.stderr or "")[:10_000],
+            "truncated": truncated,
+            "finished_at": _utcnow().isoformat(),
+        }
+
+        if result.returncode != 0:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=f"zap exited with code {result.returncode}",
+                result_payload=payload,
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "returncode": result.returncode}
+
+        ingest_stats = _normalize_and_ingest(
+            session,
+            scan=scan,
+            engine=ScannerEngine.ZAP,
+            raw_output=stdout,
+        )
+        payload["ingest"] = {
+            "inserted": ingest_stats.inserted,
+            "updated": ingest_stats.updated,
+            "skipped": ingest_stats.skipped,
+            "unmatched_targets": ingest_stats.unmatched_targets[:20],
+        }
+
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.COMPLETED,
+            progress=100.0,
+            error_message=None,
+            result_payload=payload,
+            mark_completed=True,
+        )
+        next_task = _maybe_enqueue_pipeline_next(session, scan)
+        out = {
+            "scan_id": scan_id,
+            "status": "completed",
+            "targets": targets,
+            "returncode": 0,
+            "ingest": payload["ingest"],
+        }
+        if next_task:
+            out["pipeline_next_task_id"] = next_task
+        return out
+
+
 @celery_app.task(name="scans.run_scan", bind=True)
 def run_scan(self, scan_id: str) -> dict[str, Any]:
     """Dispatcher — routes to engine-specific Celery tasks."""
@@ -907,6 +1118,15 @@ def run_scan(self, scan_id: str) -> dict[str, Any]:
 
     if engine == ScannerEngine.OPENVAS:
         async_result = run_openvas_scan.delay(scan_id)
+        return {
+            "scan_id": scan_id,
+            "status": "delegated",
+            "engine": engine.value,
+            "task_id": async_result.id,
+        }
+
+    if engine == ScannerEngine.ZAP:
+        async_result = run_zap_scan.delay(scan_id)
         return {
             "scan_id": scan_id,
             "status": "delegated",
