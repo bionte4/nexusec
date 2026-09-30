@@ -71,6 +71,48 @@ def test_nmap_build_argv_allowlist_and_safe_output() -> None:
     assert argv.index("-oX") < argv.index("10.0.0.5")
 
 
+def test_nmap_service_scripts_and_port_preset() -> None:
+    wrapper = NmapWrapper()
+    argv = wrapper.build_argv(
+        NmapScanRequest(
+            targets=["10.0.0.5"],
+            flags=["-sV", "-Pn"],
+            scripts=["banner", "http-title", "mysql-info"],
+            port_preset="common_va",
+        )
+    )
+    assert "-p" in argv
+    ports = argv[argv.index("-p") + 1]
+    assert "80" in ports and "3306" in ports and "5432" in ports
+    assert "--script" in argv
+    scripts = argv[argv.index("--script") + 1]
+    assert "banner" in scripts and "mysql-info" in scripts
+
+
+def test_nmap_rejects_unknown_script() -> None:
+    wrapper = NmapWrapper()
+    with pytest.raises(ToolExecutionError, match="script not allowlisted"):
+        wrapper.build_argv(
+            NmapScanRequest(targets=["10.0.0.5"], scripts=["brute"])
+        )
+
+
+def test_nmap_role_port_presets() -> None:
+    wrapper = NmapWrapper()
+    for preset in ("webserver", "dbserver", "appserver"):
+        argv = wrapper.build_argv(
+            NmapScanRequest(targets=["10.0.0.5"], port_preset=preset)
+        )
+        assert "-p" in argv
+        ports = argv[argv.index("-p") + 1]
+        if preset == "webserver":
+            assert "80" in ports and "443" in ports
+        elif preset == "dbserver":
+            assert "3306" in ports and "5432" in ports
+        else:
+            assert "8080" in ports and "7001" in ports
+
+
 def test_nmap_rejects_unknown_flag() -> None:
     wrapper = NmapWrapper()
     with pytest.raises(ToolExecutionError, match="not allowlisted"):

@@ -132,10 +132,10 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 
 | Engine | Tipe scan tipikal | Keterangan |
 |--------|-------------------|------------|
-| `nmap` | `discovery` / `va` | Port/service fingerprint; output XML dinormalisasi otomatis |
-| `nuclei` | `va` / `pt` | Template-driven vulnerability checks (JSONL → ingest) |
+| `nmap` | `discovery` / `va` | Port/service fingerprint + NSE unauthenticated; `port_preset` `common_va` / `webserver` / `dbserver` / `appserver` |
+| `nuclei` | `va` / `pt` | Template-driven VA; default packs `http`+`ssl`+`network` (tanpa kredensial) |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
-| `openvas` | `va` | Greenbone/OpenVAS XML — default `OPENVAS_MODE=mock` (lab/CI); import via `config.report_xml` |
+| `openvas` | `va` | Greenbone/OpenVAS — mock catalogs `webserver`/`dbserver`/`appserver`, atau GMP live / `report_xml` |
 | `other` | — | Placeholder API/UI |
 
 Jenis `scan_type`: `discovery` · `va` · `pt` · `compliance` · `custom`.
@@ -156,8 +156,9 @@ curl -s -X POST "$API/api/v1/scans" \
     \"engine\": \"nmap\",
     \"asset_ids\": [\"$ASSET_ID\"],
     \"config\": {
-      \"ports\": \"top-1000\",
-      \"timing\": \"T3\"
+      \"port_preset\": \"common_va\",
+      \"nmap_scripts\": [\"banner\", \"http-title\", \"http-server-header\", \"ssl-cert\", \"mysql-info\"],
+      \"timeout_seconds\": 600
     },
     \"start_immediately\": true
   }" | python3 -m json.tool
@@ -222,11 +223,48 @@ curl -s -X POST "$API/api/v1/scans" \
     \"asset_ids\": [\"$ASSET_ID\"],
     \"config\": {
       \"severity\": [\"critical\", \"high\", \"medium\"],
-      \"tags\": [\"cve\", \"misconfig\"]
+      \"tags\": [\"cve\", \"misconfig\", \"vuln\", \"exposure\"],
+      \"template_dirs\": [
+        \"/opt/nuclei-templates/http\",
+        \"/opt/nuclei-templates/ssl\",
+        \"/opt/nuclei-templates/network\"
+      ]
     },
     \"start_immediately\": true
   }" | python3 -m json.tool
 ```
+
+### 5.4b Scan OpenVAS mock (katalog web / DB / app)
+
+```bash
+curl -s -X POST "$API/api/v1/scans" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{
+    \"name\": \"VA OpenVAS mock — web+db+app\",
+    \"scan_type\": \"va\",
+    \"engine\": \"openvas\",
+    \"asset_ids\": [\"$ASSET_ID\"],
+    \"config\": {
+      \"openvas_mode\": \"mock\",
+      \"openvas_catalogs\": [\"webserver\", \"dbserver\", \"appserver\"]
+    },
+    \"start_immediately\": true
+  }" | python3 -m json.tool
+```
+
+Hanya satu role: set misalnya `\"openvas_catalogs\": [\"dbserver\"]`. Detail GMP live: [`greenbone-gvm.md`](greenbone-gvm.md).
+
+### 5.4c VA tanpa kredensial (ringkasan)
+
+Cakupan unauthenticated default (tidak butuh login target):
+
+| Engine | Config kunci | Coverage |
+|--------|--------------|----------|
+| Nmap | `port_preset`, `nmap_scripts` | Port web/DB/app + NSE fingerprint (banner, HTTP, TLS, mysql-info) |
+| Nuclei | `template_dirs` | Packs `http`, `ssl`, `network` |
+| OpenVAS mock | `openvas_catalogs` | `webserver`, `dbserver`, `appserver` |
+
+Authenticated deep scan (credentialed VA) belum termasuk path default ini.
 
 ### 5.5 Enqueue ulang scan yang sudah dibuat
 

@@ -403,6 +403,13 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
 
         cfg = scan.config or {}
         flags = cfg.get("nmap_flags") or list(DEFAULT_NMAP_FLAGS)
+        # Unauthenticated service VA defaults: common web/DB ports + safe NSE scripts
+        scripts = cfg.get("nmap_scripts")
+        if scripts is None:
+            from workers.tool_wrappers.nmap import DEFAULT_SERVICE_SCRIPTS
+
+            scripts = list(DEFAULT_SERVICE_SCRIPTS)
+        port_preset = cfg.get("port_preset") or cfg.get("nmap_port_preset") or "common_va"
         timeout = int(cfg.get("timeout_seconds") or 600)
 
         try:
@@ -411,6 +418,8 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
                 NmapScanRequest(
                     targets=targets,
                     flags=flags,
+                    scripts=list(scripts) if scripts else [],
+                    port_preset=str(port_preset) if port_preset else None,
                     timeout_seconds=timeout,
                 )
             )
@@ -566,7 +575,11 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
         concurrency = int(cfg.get("concurrency") or 10)
         bulk_size = int(cfg.get("bulk_size") or 10)
         timeout = int(cfg.get("timeout_seconds") or 900)
-        template_dir = str(cfg.get("template_dir") or "/opt/nuclei-templates/http")
+        template_dirs = cfg.get("template_dirs") or []
+        template_dir = str(
+            cfg.get("template_dir")
+            or "/opt/nuclei-templates/http,/opt/nuclei-templates/ssl,/opt/nuclei-templates/network"
+        )
 
         try:
             wrapper = NucleiWrapper()
@@ -581,6 +594,7 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
                     bulk_size=bulk_size,
                     timeout_seconds=timeout,
                     template_dir=template_dir,
+                    template_dirs=list(template_dirs) if template_dirs else (),
                 )
             )
         except ToolNotFoundError as exc:
@@ -735,6 +749,11 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
 
         timeout = int(cfg.get("timeout_seconds") or 900)
         mode = cfg.get("openvas_mode") or cfg.get("mode")
+        catalogs = cfg.get("openvas_catalogs") or cfg.get("catalogs")
+        if isinstance(catalogs, str):
+            catalogs = [p.strip() for p in catalogs.split(",") if p.strip()]
+        elif catalogs is not None and not isinstance(catalogs, (list, tuple)):
+            catalogs = None
 
         try:
             wrapper = OpenVasWrapper()
@@ -744,6 +763,7 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
                     timeout_seconds=timeout,
                     mode=str(mode) if mode else None,
                     report_xml=report_xml if isinstance(report_xml, str) else None,
+                    catalogs=list(catalogs) if catalogs else (),
                 )
             )
         except ToolNotFoundError as exc:

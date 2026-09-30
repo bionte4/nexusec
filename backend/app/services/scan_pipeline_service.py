@@ -33,14 +33,22 @@ def default_va_config(engine: ScannerEngine) -> dict[str, Any]:
     if engine == ScannerEngine.NUCLEI:
         return {
             "severity": ["critical", "high", "medium"],
-            "tags": ["cve", "misconfig", "vuln"],
+            "tags": ["cve", "misconfig", "vuln", "exposure"],
             "exclude_tags": ["dos"],
             "rate_limit": 25,
             "concurrency": 10,
             "bulk_size": 10,
+            "template_dirs": [
+                "/opt/nuclei-templates/http",
+                "/opt/nuclei-templates/ssl",
+                "/opt/nuclei-templates/network",
+            ],
         }
     if engine == ScannerEngine.OPENVAS:
-        return {"openvas_mode": "mock"}
+        return {
+            "openvas_mode": "mock",
+            "openvas_catalogs": ["webserver", "dbserver", "appserver"],
+        }
     return {}
 
 
@@ -88,6 +96,14 @@ class ScanPipelineService:
             config={
                 "pipeline_id": pipeline_id,
                 "pipeline_role": "discovery",
+                "port_preset": "common_va",
+                "nmap_scripts": [
+                    "banner",
+                    "http-title",
+                    "http-server-header",
+                    "ssl-cert",
+                    "mysql-info",
+                ],
             },
             created_by_id=created_by_id,
         )

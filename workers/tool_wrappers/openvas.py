@@ -26,6 +26,215 @@ logger = logging.getLogger(__name__)
 DEFAULT_OPENVAS_MODE = "mock"
 
 
+# Mock finding catalogs for unauthenticated VA demos (no credentials).
+# Each entry: (oid, name, threat, severity, port, cve, description)
+MockFinding = tuple[str, str, str, str, str, str, str]
+
+MOCK_FINDING_CATALOGS: dict[str, tuple[MockFinding, ...]] = {
+    "webserver": (
+        (
+            "1.3.6.1.4.1.25623.1.0.103511",
+            "Apache HTTP Server Version Detection",
+            "Info",
+            "0.0",
+            "80/tcp",
+            "",
+            "Unauthenticated Apache Server banner / version disclosure (CWE-200).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.103415",
+            "nginx HTTP Server Detection",
+            "Info",
+            "0.0",
+            "80/tcp",
+            "",
+            "Remote nginx web server responds to unauthenticated HTTP probes.",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.901185",
+            "Microsoft IIS Web Server Detection",
+            "Info",
+            "0.0",
+            "80/tcp",
+            "",
+            "IIS web server fingerprint via unauthenticated response headers (CWE-200).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.108597",
+            "HTTP Security Headers Detection",
+            "Low",
+            "2.6",
+            "80/tcp",
+            "",
+            "Missing recommended security headers on HTTP service.",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.103497",
+            "SSL/TLS: Report Vulnerable Cipher Suites for HTTPS",
+            "High",
+            "7.5",
+            "443/tcp",
+            "CVE-2016-2183",
+            "The remote HTTPS service supports vulnerable TLS cipher suites (CWE-326).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.105766",
+            "Web Server Directory Listing Enabled",
+            "Medium",
+            "5.0",
+            "80/tcp",
+            "",
+            "Unauthenticated directory listing may expose sensitive paths (CWE-548).",
+        ),
+    ),
+    "dbserver": (
+        (
+            "1.3.6.1.4.1.25623.1.0.100151",
+            "MySQL Unauthenticated Information Disclosure",
+            "Medium",
+            "5.0",
+            "3306/tcp",
+            "",
+            "Remote MySQL service responds to unauthenticated probes and may leak version (CWE-200).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.103883",
+            "PostgreSQL Service Detection",
+            "Info",
+            "0.0",
+            "5432/tcp",
+            "",
+            "PostgreSQL database port is reachable without authentication gatekeeping at network layer.",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.100152",
+            "Microsoft SQL Server Detection",
+            "Info",
+            "0.0",
+            "1433/tcp",
+            "",
+            "MSSQL TDS port responds to unauthenticated network probes (CWE-200).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.105371",
+            "MongoDB Service Detection / Unauthenticated Access Check",
+            "High",
+            "7.5",
+            "27017/tcp",
+            "",
+            "MongoDB wire protocol reachable; unauthenticated exposure risk if auth disabled (CWE-306).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.105388",
+            "Redis Server Unauthenticated Command Check",
+            "High",
+            "7.5",
+            "6379/tcp",
+            "",
+            "Redis port open; INFO/PING may succeed without AUTH (CWE-306).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.105591",
+            "Elasticsearch / OpenSearch HTTP API Detection",
+            "Medium",
+            "5.0",
+            "9200/tcp",
+            "",
+            "Search cluster HTTP API reachable without credentials (CWE-306).",
+        ),
+    ),
+    "appserver": (
+        (
+            "1.3.6.1.4.1.25623.1.0.105370",
+            "Apache Tomcat Default Files / Manager Exposure Check",
+            "Medium",
+            "5.0",
+            "8080/tcp",
+            "",
+            "Unauthenticated checks for common Tomcat paths and management interfaces (CWE-284).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.100099",
+            "JBoss / WildFly Management Console Detection",
+            "Medium",
+            "5.0",
+            "9990/tcp",
+            "",
+            "Application server management console reachable without network ACL (CWE-284).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.103708",
+            "Oracle WebLogic Server Console Detection",
+            "Medium",
+            "5.0",
+            "7001/tcp",
+            "",
+            "WebLogic admin console path responds to unauthenticated HTTP probes (CWE-284).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.103807",
+            "Jenkins CI Unauthenticated Exposure Check",
+            "High",
+            "7.5",
+            "8080/tcp",
+            "",
+            "Jenkins dashboard / script console paths may be reachable without auth (CWE-306).",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.103823",
+            "Node.js / Express Application Server Detection",
+            "Info",
+            "0.0",
+            "3000/tcp",
+            "",
+            "Node/Express-style app server fingerprint via unauthenticated HTTP response.",
+        ),
+        (
+            "1.3.6.1.4.1.25623.1.0.900658",
+            "SSH Weak Encryption Algorithms Supported",
+            "Medium",
+            "5.0",
+            "22/tcp",
+            "CVE-2015-4000",
+            "Remote management SSH often co-located with app hosts; weak ciphers (CWE-326).",
+        ),
+    ),
+}
+
+DEFAULT_MOCK_CATALOGS: tuple[str, ...] = ("webserver", "dbserver", "appserver")
+
+
+def resolve_mock_catalogs(names: Optional[Sequence[str]] = None) -> list[str]:
+    """Return allowlisted catalog keys; default = webserver + dbserver + appserver."""
+    if not names:
+        return list(DEFAULT_MOCK_CATALOGS)
+    resolved: list[str] = []
+    seen: set[str] = set()
+    for raw in names:
+        key = str(raw).strip().lower().replace("-", "").replace("_", "")
+        # Accept web_server / web-server / WebServer aliases
+        aliases = {
+            "web": "webserver",
+            "webserver": "webserver",
+            "db": "dbserver",
+            "database": "dbserver",
+            "dbserver": "dbserver",
+            "app": "appserver",
+            "application": "appserver",
+            "appserver": "appserver",
+        }
+        mapped = aliases.get(key)
+        if mapped is None:
+            raise ToolExecutionError(
+                f"OpenVAS mock catalog not allowlisted: {raw!r} "
+                f"(allowed: {', '.join(DEFAULT_MOCK_CATALOGS)})"
+            )
+        if mapped not in seen:
+            seen.add(mapped)
+            resolved.append(mapped)
+    return resolved or list(DEFAULT_MOCK_CATALOGS)
+
+
 @dataclass
 class OpenVasScanRequest:
     targets: list[str]
@@ -33,6 +242,8 @@ class OpenVasScanRequest:
     mode: Optional[str] = None
     report_xml: Optional[str] = None
     tags: Sequence[str] = field(default_factory=list)
+    # Mock-only: which finding catalogs to emit (webserver | dbserver | appserver).
+    catalogs: Sequence[str] = field(default_factory=lambda: list(DEFAULT_MOCK_CATALOGS))
 
 
 @dataclass(frozen=True)
@@ -107,26 +318,45 @@ class OpenVasWrapper:
 
         mode = (request.mode or self.mode).lower()
         if mode == "gmp":
-            return self._run_gmp(targets, timeout_seconds=request.timeout_seconds)
-        return self._run_mock(targets)
+            return self._run_gmp(
+                targets,
+                timeout_seconds=request.timeout_seconds,
+                catalogs=request.catalogs,
+            )
+        return self._run_mock(targets, catalogs=request.catalogs)
 
-    def _run_mock(self, targets: list[str]) -> ExecutionResult:
-        xml = build_mock_openvas_report(targets)
+    def _run_mock(
+        self,
+        targets: list[str],
+        *,
+        catalogs: Optional[Sequence[str]] = None,
+    ) -> ExecutionResult:
+        keys = resolve_mock_catalogs(catalogs)
+        xml = build_mock_openvas_report(targets, catalogs=keys)
         return ExecutionResult(
-            command=("openvas", "mock", *targets),
+            command=("openvas", "mock", *keys, "--", *targets),
             returncode=0,
             stdout=xml,
-            stderr="openvas mock connector: generated synthetic GVM report",
+            stderr=(
+                "openvas mock connector: generated synthetic GVM report "
+                f"(catalogs={','.join(keys)})"
+            ),
         )
 
-    def _run_gmp(self, targets: list[str], *, timeout_seconds: int) -> ExecutionResult:
+    def _run_gmp(
+        self,
+        targets: list[str],
+        *,
+        timeout_seconds: int,
+        catalogs: Optional[Sequence[str]] = None,
+    ) -> ExecutionResult:
         if not self.gvm.configured():
             msg = (
                 "OPENVAS_MODE=gmp requires GVM_USERNAME/GVM_PASSWORD and "
                 "GVM_SOCKET or GVM_HOST (see docs/greenbone-gvm.md)"
             )
             if self.gvm.fallback_mock:
-                result = self._run_mock(targets)
+                result = self._run_mock(targets, catalogs=catalogs)
                 return ExecutionResult(
                     command=result.command,
                     returncode=0,
@@ -351,39 +581,19 @@ def run_gmp_scan(
         return xml, meta
 
 
-def build_mock_openvas_report(targets: list[str]) -> str:
+def build_mock_openvas_report(
+    targets: list[str],
+    *,
+    catalogs: Optional[Sequence[str]] = None,
+) -> str:
     """Deterministic OpenVAS-like XML for normalization + UI demos."""
     now = datetime.now(timezone.utc).isoformat()
     results: list[str] = []
-    catalog = [
-        (
-            "1.3.6.1.4.1.25623.1.0.900658",
-            "SSH Weak Encryption Algorithms Supported",
-            "Medium",
-            "5.0",
-            "22/tcp",
-            "CVE-2015-4000",
-            "The remote SSH server allows weak encryption algorithms (CWE-326).",
-        ),
-        (
-            "1.3.6.1.4.1.25623.1.0.103497",
-            "SSL/TLS: Report Vulnerable Cipher Suites for HTTPS",
-            "High",
-            "7.5",
-            "443/tcp",
-            "CVE-2016-2183",
-            "The remote service supports vulnerable TLS cipher suites (CWE-326).",
-        ),
-        (
-            "1.3.6.1.4.1.25623.1.0.108597",
-            "HTTP Security Headers Detection",
-            "Low",
-            "2.6",
-            "80/tcp",
-            "",
-            "Missing recommended security headers on HTTP service.",
-        ),
-    ]
+    keys = resolve_mock_catalogs(catalogs)
+    catalog: list[MockFinding] = []
+    for key in keys:
+        catalog.extend(MOCK_FINDING_CATALOGS[key])
+
     rid = 0
     for host in targets:
         for oid, name, threat, severity, port, cve, desc in catalog:
@@ -406,9 +616,10 @@ def build_mock_openvas_report(targets: list[str]) -> str:
     </result>"""
             )
     body = "\n".join(results)
+    catalogs_label = ",".join(keys)
     return f"""<?xml version="1.0"?>
 <report id="nexusec-openvas-mock" format_id="XML">
-  <name>NexuSec OpenVAS mock report</name>
+  <name>NexuSec OpenVAS mock report ({escape(catalogs_label)})</name>
   <creation_time>{escape(now)}</creation_time>
   <results>
 {body}

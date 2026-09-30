@@ -17,8 +17,23 @@ from workers.tool_wrappers.validators import TargetValidationError, validate_tar
 
 _ALLOWED_SEVERITIES = frozenset({"critical", "high", "medium", "low", "info", "unknown"})
 _TAG_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
-# Full catalog OOMs under modest RLIMIT_AS; HTTP templates cover typical VA scope.
-_DEFAULT_TEMPLATE_DIR = "/opt/nuclei-templates/http"
+
+# Unauthenticated VA template packs under /opt/nuclei-templates (no full-tree OOM).
+_ALLOWED_TEMPLATE_DIRS = frozenset(
+    {
+        "/opt/nuclei-templates/http",
+        "/opt/nuclei-templates/ssl",
+        "/opt/nuclei-templates/network",
+        "/opt/nuclei-templates/dns",
+        "/opt/nuclei-templates/tcp",
+        "/opt/nuclei-templates/javascript",
+    }
+)
+_DEFAULT_TEMPLATE_DIRS: tuple[str, ...] = (
+    "/opt/nuclei-templates/http",
+    "/opt/nuclei-templates/ssl",
+    "/opt/nuclei-templates/network",
+)
 
 
 @dataclass
@@ -32,7 +47,9 @@ class NucleiScanRequest:
     concurrency: int = 10
     bulk_size: int = 10
     timeout_seconds: int = 900
-    template_dir: str = _DEFAULT_TEMPLATE_DIR
+    # Prefer template_dirs for multi-pack unauthenticated VA; template_dir kept for compat.
+    template_dir: str = ""
+    template_dirs: Sequence[str] = field(default_factory=tuple)
 
 
 def validate_nuclei_target(value: str) -> str:
@@ -66,6 +83,29 @@ def validate_nuclei_target(value: str) -> str:
 
     host = validate_target(raw)
     return f"https://{host}"
+
+
+def _resolve_template_dirs(request: NucleiScanRequest) -> list[str]:
+    dirs: list[str] = []
+    raw_dirs = list(request.template_dirs) if request.template_dirs else []
+    if not raw_dirs and request.template_dir:
+        # Support comma-separated legacy field
+        raw_dirs = [p.strip() for p in str(request.template_dir).split(",") if p.strip()]
+    if not raw_dirs:
+        raw_dirs = list(_DEFAULT_TEMPLATE_DIRS)
+
+    seen: set[str] = set()
+    for path in raw_dirs:
+        cleaned = path.rstrip("/")
+        if cleaned not in _ALLOWED_TEMPLATE_DIRS:
+            raise ToolExecutionError(
+                f"Nuclei template_dir not allowlisted: {path!r} "
+                f"(allowed packs: http, ssl, network, dns, tcp, javascript)"
+            )
+        if cleaned not in seen:
+            seen.add(cleaned)
+            dirs.append(cleaned)
+    return dirs
 
 
 class NucleiWrapper:
@@ -135,26 +175,28 @@ class NucleiWrapper:
         if bulk_size < 1 or bulk_size > 50:
             raise ToolExecutionError("Nuclei bulk_size must be between 1 and 50")
 
-        template_dir = (request.template_dir or _DEFAULT_TEMPLATE_DIR).strip()
-        if not template_dir.startswith("/opt/nuclei-templates"):
-            raise ToolExecutionError("Nuclei template_dir must be under /opt/nuclei-templates")
+        template_dirs = _resolve_template_dirs(request)
 
         argv: list[str] = [
             self.binary,
             "-jsonl",
             "-silent",
             "-duc",
-            "-t",
-            template_dir,
-            "-severity",
-            ",".join(severities),
-            "-rate-limit",
-            str(rate),
-            "-c",
-            str(concurrency),
-            "-bulk-size",
-            str(bulk_size),
         ]
+        for tdir in template_dirs:
+            argv.extend(["-t", tdir])
+        argv.extend(
+            [
+                "-severity",
+                ",".join(severities),
+                "-rate-limit",
+                str(rate),
+                "-c",
+                str(concurrency),
+                "-bulk-size",
+                str(bulk_size),
+            ]
+        )
         if tags:
             argv.extend(["-tags", ",".join(tags)])
         if exclude_tags:

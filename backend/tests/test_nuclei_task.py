@@ -40,18 +40,38 @@ def test_nuclei_wrapper_build_argv_allowlists() -> None:
             tags=["cve"],
             exclude_tags=["dos"],
             rate_limit=25,
+            template_dirs=[
+                "/opt/nuclei-templates/http",
+                "/opt/nuclei-templates/ssl",
+                "/opt/nuclei-templates/network",
+            ],
         )
     )
     assert argv[0] == "nuclei"
     assert "-jsonl" in argv
     assert "-duc" in argv
-    assert argv[argv.index("-t") + 1] == "/opt/nuclei-templates/http"
+    # Multi -t for unauthenticated packs
+    t_indices = [i for i, v in enumerate(argv) if v == "-t"]
+    assert len(t_indices) == 3
+    assert argv[t_indices[0] + 1] == "/opt/nuclei-templates/http"
+    assert argv[t_indices[1] + 1] == "/opt/nuclei-templates/ssl"
+    assert argv[t_indices[2] + 1] == "/opt/nuclei-templates/network"
     assert argv[argv.index("-severity") + 1] == "high,critical"
     assert argv[argv.index("-tags") + 1] == "cve"
     assert argv[argv.index("-rate-limit") + 1] == "25"
     assert argv[argv.index("-c") + 1] == "10"
     assert argv[argv.index("-bulk-size") + 1] == "10"
     assert argv[argv.index("-u") + 1] == "https://example.com"
+
+
+def test_nuclei_default_template_dirs_include_ssl_network() -> None:
+    argv = NucleiWrapper().build_argv(
+        NucleiScanRequest(targets=["https://example.com"])
+    )
+    joined = " ".join(argv)
+    assert "/opt/nuclei-templates/http" in joined
+    assert "/opt/nuclei-templates/ssl" in joined
+    assert "/opt/nuclei-templates/network" in joined
 
 
 def test_nuclei_wrapper_rejects_bad_severity() -> None:

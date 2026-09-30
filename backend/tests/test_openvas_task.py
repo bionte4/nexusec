@@ -79,8 +79,27 @@ def test_openvas_wrapper_mock_parses() -> None:
         OpenVasScanRequest(targets=["10.0.0.8"])
     )
     findings = OpenVasXmlParser().parse(result.stdout)
-    assert len(findings) == 3
-    assert {f.port for f in findings} == {22, 443, 80}
+    assert len(findings) >= 12
+    titles = " ".join(f.name.lower() for f in findings)
+    assert "apache" in titles or "nginx" in titles
+    assert "mysql" in titles or "postgresql" in titles
+    assert "tomcat" in titles or "jenkins" in titles or "weblogic" in titles
+    ports = {f.port for f in findings}
+    assert 80 in ports and 3306 in ports
+
+
+def test_openvas_mock_catalog_filter() -> None:
+    from app.normalization.parsers.openvas_xml import OpenVasXmlParser
+    from workers.tool_wrappers.openvas import OpenVasScanRequest, OpenVasWrapper
+
+    result = OpenVasWrapper(mode="mock").run(
+        OpenVasScanRequest(targets=["10.0.0.8"], catalogs=["dbserver"])
+    )
+    findings = OpenVasXmlParser().parse(result.stdout)
+    titles = " ".join(f.name.lower() for f in findings)
+    assert "mysql" in titles or "redis" in titles
+    assert "apache http" not in titles
+    assert "tomcat" not in titles
 
 
 def test_openvas_gmp_without_credentials_fails_closed() -> None:

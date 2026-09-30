@@ -10,10 +10,14 @@ def test_default_va_config_nuclei() -> None:
     cfg = default_va_config(ScannerEngine.NUCLEI)
     assert cfg["rate_limit"] == 25
     assert "dos" in cfg["exclude_tags"]
+    assert "/opt/nuclei-templates/ssl" in cfg["template_dirs"]
+    assert "/opt/nuclei-templates/network" in cfg["template_dirs"]
 
 
 def test_default_va_config_openvas() -> None:
-    assert default_va_config(ScannerEngine.OPENVAS)["openvas_mode"] == "mock"
+    cfg = default_va_config(ScannerEngine.OPENVAS)
+    assert cfg["openvas_mode"] == "mock"
+    assert set(cfg["openvas_catalogs"]) == {"webserver", "dbserver", "appserver"}
 
 
 def test_pipeline_va_engine_allowlist() -> None:

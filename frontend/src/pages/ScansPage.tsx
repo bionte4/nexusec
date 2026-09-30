@@ -137,7 +137,16 @@ export function ScansPage() {
         name: f.name || t('scans.presetDiscoveryName'),
         scan_type: 'discovery',
         engine: 'nmap',
-        config: {},
+        config: {
+          port_preset: 'common_va',
+          nmap_scripts: [
+            'banner',
+            'http-title',
+            'http-server-header',
+            'ssl-cert',
+            'mysql-info',
+          ],
+        },
       }))
       return
     }
@@ -149,11 +158,16 @@ export function ScansPage() {
         engine: 'nuclei',
         config: {
           severity: ['critical', 'high', 'medium'],
-          tags: ['cve', 'misconfig', 'vuln'],
+          tags: ['cve', 'misconfig', 'vuln', 'exposure'],
           exclude_tags: ['dos'],
           rate_limit: 25,
           concurrency: 10,
           bulk_size: 10,
+          template_dirs: [
+            '/opt/nuclei-templates/http',
+            '/opt/nuclei-templates/ssl',
+            '/opt/nuclei-templates/network',
+          ],
         },
       }))
       return
@@ -164,7 +178,10 @@ export function ScansPage() {
         name: f.name || t('scans.presetOpenvasName'),
         scan_type: 'va',
         engine: 'openvas',
-        config: { openvas_mode: 'mock' },
+        config: {
+          openvas_mode: 'mock',
+          openvas_catalogs: ['webserver', 'dbserver', 'appserver'],
+        },
       }))
       return
     }
@@ -184,7 +201,16 @@ export function ScansPage() {
         name: f.name || t('scans.presetDiscoveryName'),
         scan_type: 'discovery',
         engine: 'nmap',
-        config: {},
+        config: {
+          port_preset: 'common_va',
+          nmap_scripts: [
+            'banner',
+            'http-title',
+            'http-server-header',
+            'ssl-cert',
+            'mysql-info',
+          ],
+        },
       }))
       return
     }
@@ -196,11 +222,16 @@ export function ScansPage() {
         engine: 'nuclei',
         config: {
           severity: ['critical', 'high', 'medium'],
-          tags: ['cve', 'misconfig', 'vuln'],
+          tags: ['cve', 'misconfig', 'vuln', 'exposure'],
           exclude_tags: ['dos'],
           rate_limit: 25,
           concurrency: 10,
           bulk_size: 10,
+          template_dirs: [
+            '/opt/nuclei-templates/http',
+            '/opt/nuclei-templates/ssl',
+            '/opt/nuclei-templates/network',
+          ],
         },
       }))
       return
@@ -211,7 +242,10 @@ export function ScansPage() {
         name: f.name || t('scans.presetOpenvasName'),
         scan_type: 'va',
         engine: 'openvas',
-        config: { openvas_mode: 'mock' },
+        config: {
+          openvas_mode: 'mock',
+          openvas_catalogs: ['webserver', 'dbserver', 'appserver'],
+        },
       }))
       return
     }
@@ -689,30 +723,78 @@ export function ScansPage() {
               </select>
             </div>
             {form.engine === 'openvas' ? (
-              <div className="space-y-1">
-                <label className="text-[11px] text-surface-400">
-                  {t('scans.openvasMode')}
-                </label>
-                <select
-                  value={
-                    typeof form.config.openvas_mode === 'string'
-                      ? form.config.openvas_mode
-                      : 'mock'
-                  }
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      config: { ...form.config, openvas_mode: e.target.value },
-                    })
-                  }
-                  className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
-                >
-                  <option value="mock">{t('scans.openvasModeMock')}</option>
-                  <option value="gmp">{t('scans.openvasModeGmp')}</option>
-                </select>
-                <p className="text-[10px] text-surface-500">
-                  {t('scans.openvasModeHint')}
-                </p>
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-surface-400">
+                    {t('scans.openvasMode')}
+                  </label>
+                  <select
+                    value={
+                      typeof form.config.openvas_mode === 'string'
+                        ? form.config.openvas_mode
+                        : 'mock'
+                    }
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: { ...form.config, openvas_mode: e.target.value },
+                      })
+                    }
+                    className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                  >
+                    <option value="mock">{t('scans.openvasModeMock')}</option>
+                    <option value="gmp">{t('scans.openvasModeGmp')}</option>
+                  </select>
+                  <p className="text-[10px] text-surface-500">
+                    {t('scans.openvasModeHint')}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-surface-400">
+                    {t('scans.openvasCatalogs')}
+                  </label>
+                  <div className="flex flex-wrap gap-3 text-xs text-surface-300">
+                    {(
+                      [
+                        ['webserver', 'scans.openvasCatalogWeb'],
+                        ['dbserver', 'scans.openvasCatalogDb'],
+                        ['appserver', 'scans.openvasCatalogApp'],
+                      ] as const
+                    ).map(([key, labelKey]) => {
+                      const selected = Array.isArray(form.config.openvas_catalogs)
+                        ? (form.config.openvas_catalogs as string[])
+                        : ['webserver', 'dbserver', 'appserver']
+                      const checked = selected.includes(key)
+                      return (
+                        <label key={key} className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? selected.filter((c) => c !== key)
+                                : [...selected, key]
+                              setForm({
+                                ...form,
+                                config: {
+                                  ...form.config,
+                                  openvas_catalogs:
+                                    next.length > 0
+                                      ? next
+                                      : ['webserver', 'dbserver', 'appserver'],
+                                },
+                              })
+                            }}
+                          />
+                          {t(labelKey)}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] text-surface-500">
+                    {t('scans.openvasCatalogHint')}
+                  </p>
+                </div>
               </div>
             ) : null}
             <label className="flex items-center gap-2 text-xs text-surface-300">

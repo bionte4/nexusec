@@ -3,7 +3,7 @@
 NexuSec **tidak menyertakan** appliance Greenbone di compose default (berat: DB feed, VT sync, banyak service).  
 Yang ada di platform:
 
-1. **mock** — XML sintetis (lab/CI)  
+1. **mock** — XML sintetis (lab/CI) dengan katalog `webserver` / `dbserver` / `appserver` (atur `config.openvas_catalogs`; lihat [`scanner-connectors.md`](scanner-connectors.md) §6)  
 2. **import** — `config.report_xml` dari laporan GVM yang diekspor  
 3. **gmp** — klien live `python-gvm` ke appliance yang Anda sediakan
 

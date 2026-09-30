@@ -135,6 +135,12 @@ const en = {
     openvasModeGmp: 'gmp — live Greenbone (set GVM_* in .env)',
     openvasModeHint:
       'Needs GVM_USERNAME/PASSWORD and GVM_SOCKET or GVM_HOST. See docs/greenbone-gvm.md. Default follows OPENVAS_MODE.',
+    openvasCatalogs: 'Mock catalogs (unauthenticated)',
+    openvasCatalogWeb: 'webserver',
+    openvasCatalogDb: 'dbserver',
+    openvasCatalogApp: 'appserver',
+    openvasCatalogHint:
+      'Synthetic findings for web / DB / app servers without credentials. Ignored in gmp mode when live GVM is configured.',
     pipelineTitle: 'VA pipeline (one click)',
     pipelineHint: 'Runs nmap discovery, then automatically starts the selected VA engine on the same asset.',
     pipelineStart: 'Start discovery → VA',
@@ -516,6 +522,12 @@ const id: Messages = {
     openvasModeGmp: 'gmp — Greenbone live (isi GVM_* di .env)',
     openvasModeHint:
       'Perlu GVM_USERNAME/PASSWORD dan GVM_SOCKET atau GVM_HOST. Lihat docs/greenbone-gvm.md.',
+    openvasCatalogs: 'Katalog mock (tanpa kredensial)',
+    openvasCatalogWeb: 'webserver',
+    openvasCatalogDb: 'dbserver',
+    openvasCatalogApp: 'appserver',
+    openvasCatalogHint:
+      'Finding sintetis untuk web / DB / app server tanpa kredensial. Diabaikan di mode gmp bila GVM live terkonfigurasi.',
     pipelineTitle: 'Pipeline VA (satu klik)',
     pipelineHint:
       'Menjalankan discovery nmap, lalu otomatis memulai engine VA yang dipilih pada aset yang sama.',

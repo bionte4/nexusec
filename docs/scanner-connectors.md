@@ -85,6 +85,13 @@ Memetakan host hidup, port terbuka, layanan, dan (opsional) script hint kerentan
 
 Flag default: `-sV -Pn -T3`. Hanya flag allowlist yang diterima lewat `config.nmap_flags`.
 
+**Unauthenticated VA (tanpa kredensial):** default worker juga memakai:
+
+- `port_preset`: `common_va` (web + DB + app umum) atau role: `webserver`, `dbserver`, `appserver`
+- `nmap_scripts`: NSE aman (`banner`, `http-title`, `http-server-header`, `ssl-cert`, `mysql-info`, …) — no brute-force
+
+Preset port lain: `web`, `db`. Kosongkan `nmap_scripts: []` jika hanya ingin fingerprint port tanpa NSE.
+
 ### 3.4 Hasil normalisasi
 
 - Port **open** → finding (port/protocol/service).
@@ -102,7 +109,12 @@ curl -s -X POST "$API/api/v1/scans" \
     \"scan_type\": \"discovery\",
     \"engine\": \"nmap\",
     \"asset_ids\": [\"$ASSET_ID\"],
-    \"config\": { \"nmap_flags\": [\"-sV\", \"-Pn\", \"-T3\"], \"timeout_seconds\": 600 },
+    \"config\": {
+      \"nmap_flags\": [\"-sV\", \"-Pn\", \"-T3\"],
+      \"port_preset\": \"common_va\",
+      \"nmap_scripts\": [\"banner\", \"http-title\", \"http-server-header\", \"ssl-cert\", \"mysql-info\"],
+      \"timeout_seconds\": 600
+    },
     \"start_immediately\": true
   }"
 ```
@@ -143,7 +155,8 @@ Vulnerability Assessment berbasis template ProjectDiscovery: misconfig, CVE HTTP
 
 - Task: `scans.run_nuclei`
 - Wrapper: `workers/tool_wrappers/nuclei.py`
-- Template default: `/opt/nuclei-templates/http` (katalog penuh terlalu berat di sandbox)
+- Template default: multi-pack unauthenticated VA — `http` + `ssl` + `network` di bawah `/opt/nuclei-templates/` (katalog penuh terlalu berat di sandbox)
+- Override: `config.template_dirs` (allowlist) atau `config.template_dir` (comma-separated legacy)
 - Output: JSONL → `stdout_jsonl`
 - Parser: `nuclei` (`NucleiJsonParser`)
 
@@ -225,7 +238,15 @@ Engine internal platform (Python asyncio di `scanners/python/nexusec_scanner`): 
 
 ### 6.1 Tujuan
 
-Mengintegrasikan hasil **OpenVAS / Greenbone GVM** ke skema finding yang sama. Di lab/CI default memakai **mock connector** (XML sintetis deterministik) agar demo & tes jalan tanpa appliance Greenbone.
+Mengintegrasikan hasil **OpenVAS / Greenbone GVM** ke skema finding yang sama. Di lab/CI default memakai **mock connector** dengan katalog finding tanpa kredensial:
+
+| Katalog | Contoh coverage |
+|---------|-----------------|
+| `webserver` | Apache / nginx / IIS, HTTP headers, TLS weak ciphers, directory listing |
+| `dbserver` | MySQL, PostgreSQL, MSSQL, MongoDB, Redis, Elasticsearch |
+| `appserver` | Tomcat, WildFly/JBoss, WebLogic, Jenkins, Node/Express |
+
+Atur lewat `config.openvas_catalogs` (default: ketiga katalog).
 
 ### 6.2 UI / preset
 
@@ -235,7 +256,7 @@ Mengintegrasikan hasil **OpenVAS / Greenbone GVM** ke skema finding yang sama. D
 - Prefill:
 
 ```json
-{ "openvas_mode": "mock" }
+{ "openvas_mode": "mock", "openvas_catalogs": ["webserver", "dbserver", "appserver"] }
 ```
 
 ### 6.3 Mode operasi
@@ -270,7 +291,10 @@ curl -s -X POST "$API/api/v1/scans" \
     \"scan_type\": \"va\",
     \"engine\": \"openvas\",
     \"asset_ids\": [\"$ASSET_ID\"],
-    \"config\": { \"openvas_mode\": \"mock\" },
+    \"config\": {
+      \"openvas_mode\": \"mock\",
+      \"openvas_catalogs\": [\"webserver\", \"dbserver\", \"appserver\"]
+    },
     \"start_immediately\": true
   }"
 ```
