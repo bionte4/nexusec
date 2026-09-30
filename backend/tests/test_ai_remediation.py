@@ -17,6 +17,7 @@ from app.models.vulnerability import Vulnerability
 from app.services.ai_remediation import (
     AIRemediationError,
     AIRemediationService,
+    RemediationResult,
     VulnerabilityContext,
     _extract_json,
     format_remediation_markdown,
@@ -42,13 +43,46 @@ def test_mock_remediation_contains_sections() -> None:
         cwe_id="CWE-89",
         severity=Severity.CRITICAL,
         asset_type="domain",
+        asset_name="api.example.com",
         affected_component="auth-service",
     )
     result = mock_remediation(ctx)
     assert "login" in result.explanation.lower() or "SQL Injection" in result.explanation
     assert "1." in result.remediation_steps
+    assert "parameterized" in result.patch_example.lower() or ":email" in result.patch_example
     assert result.provider == "mock"
     assert "## Why this vulnerability occurs" in result.markdown
+
+
+def test_mock_remediation_differs_by_service() -> None:
+    redis_ctx = VulnerabilityContext(
+        title="Redis Server Unauthenticated Command Check",
+        description="INFO may succeed without AUTH",
+        cwe_id="CWE-326",
+        severity=Severity.HIGH,
+        asset_type="ip",
+        asset_name="db-1",
+        port=6379,
+        affected_component="6379/tcp",
+    )
+    mongo_ctx = VulnerabilityContext(
+        title="MongoDB Service Detection / Unauthenticated Access Check",
+        description="Wire protocol reachable",
+        cwe_id="CWE-326",
+        severity=Severity.HIGH,
+        asset_type="ip",
+        asset_name="db-2",
+        port=27017,
+        affected_component="27017/tcp",
+    )
+    redis = mock_remediation(redis_ctx)
+    mongo = mock_remediation(mongo_ctx)
+    assert "redis" in redis.patch_example.lower()
+    assert "mongo" in mongo.patch_example.lower()
+    assert redis.patch_example != mongo.patch_example
+    assert "db-1" in redis.explanation
+    assert "db-2" in mongo.explanation
+    assert "parameterized" not in redis.patch_example.lower()
 
 
 def test_format_markdown() -> None:
@@ -259,18 +293,25 @@ async def test_vulnerability_service_generate_ai_patch_persists() -> None:
     db.refresh = AsyncMock()
 
     service = VulnerabilityService(db)
-    mock_md = format_remediation_markdown(
-        {
-            "explanation": "Weak SSH ciphers",
-            "remediation_steps": "1. Disable weak ciphers",
-            "patch_example": "Ciphers aes256-gcm@openssh.com",
-        },
+    fake = RemediationResult(
+        explanation="Weak SSH ciphers",
+        remediation_steps="1. Disable weak ciphers",
+        patch_example="Ciphers aes256-gcm@openssh.com",
         provider="mock",
-        model="template-v1",
+        model="template-v2",
+        markdown=format_remediation_markdown(
+            {
+                "explanation": "Weak SSH ciphers",
+                "remediation_steps": "1. Disable weak ciphers",
+                "patch_example": "Ciphers aes256-gcm@openssh.com",
+            },
+            provider="mock",
+            model="template-v2",
+        ),
     )
     with patch(
-        "app.services.vulnerability_service.generate_ai_remediation_patch_async",
-        new=AsyncMock(return_value=mock_md),
+        "app.services.vulnerability_service.AIRemediationService.generate",
+        new=AsyncMock(return_value=fake),
     ):
         resp = await service.generate_ai_patch(vuln.id, organization_id=org_id, persist=True)
 
@@ -279,3 +320,4 @@ async def test_vulnerability_service_generate_ai_patch_persists() -> None:
     assert "ai_remediation" in vuln.threat_intel_metadata
     assert resp.vulnerability_id == vuln.id
     assert "Weak SSH" in resp.explanation
+    assert resp.provider == "mock"

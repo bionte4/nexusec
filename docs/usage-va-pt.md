@@ -388,6 +388,23 @@ curl -s -X POST "$API/api/v1/vulnerabilities/$VULN_ID/generate-ai-patch" \
   -H "$AUTH" | python3 -m json.tool
 ```
 
+Guidance memakai konteks finding lengkap (title, asset, port/protokol, CWE, komponen, source tool):
+
+- **Dengan** `AI_API_KEY` / `AI_BASE_URL` — LLM OpenAI-compatible (Groq, OpenRouter, OpenAI) diminta menghasilkan penjelasan + langkah + contoh patch/config **khusus finding itu** (bukan contoh SQL generik untuk temuan Redis/TLS).
+- **Tanpa** key (atau fallback mock) — template deterministik per layanan/CWE (Redis, MongoDB, MySQL/Postgres, TLS/SSH weak ciphers, Tomcat/Jenkins, info disclosure, dll.).
+
+Hasil disimpan ke `vulnerability.remediation`. Di UI: detail finding → **Generate AI remediation**. Review manusia tetap wajib sebelum apply.
+
+Set di `.env` (contoh Groq):
+
+```bash
+AI_REMEDIATION_ENABLED=true
+AI_REMEDIATION_FALLBACK_MOCK=true
+AI_API_KEY=gsk_...
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_MODEL=llama-3.3-70b-versatile
+```
+
 > Output AI **wajib direview manusia** sebelum diterapkan di produksi.
 
 ### 7.6 SOC ChatOps
@@ -420,7 +437,7 @@ curl -s -H "$AUTH" "$API/api/v1/reports/nist-csf/pdf" -o nist.pdf
 
 Gunakan setelah finding punya `compliance_metadata` (ISO Annex A, PCI Req.11, GDPR Art.32, NIST CSF/800-53, dll.).
 
-Di UI Remediation: filter aset (dari **Assets** → findings, atau `?asset_id=`), lalu tombol **ISO / PCI / GDPR / NIST** (JSON/PDF) otomatis scoped ke aset itu. Metadata laporan berisi `scope_asset_id` / `scope_asset_name`. Detail finding: action remediation (status, owner, AI remediation, tiket).
+Di UI Remediation: filter aset (dari **Assets** → findings, atau `?asset_id=`), lalu tombol **ISO / PCI / GDPR / NIST** (JSON/PDF) otomatis scoped ke aset itu. Metadata laporan berisi `scope_asset_id` / `scope_asset_name`. Detail finding: action remediation (status, owner, **Generate AI remediation** yang finding-specific, tiket).
 
 Backfill finding lama (Admin):
 

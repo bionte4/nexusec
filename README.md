@@ -188,7 +188,7 @@ Custom gauges: `nexusec_active_scans`, `nexusec_celery_workers`, `nexusec_hung_s
 POST /api/v1/vulnerabilities/{id}/generate-ai-patch
 ```
 
-Providers: OpenAI-compatible via official ``openai`` SDK (`AI_API_KEY` + `AI_BASE_URL` — Groq, OpenRouter, OpenAI). Without keys, a secure template mock is used. Core helper: `generate_ai_remediation_patch(cwe_id, description)`. Output is saved to `vulnerability.remediation`.
+Providers: OpenAI-compatible via official ``openai`` SDK (`AI_API_KEY` + `AI_BASE_URL` — Groq, OpenRouter, OpenAI). Without keys (or on provider failure with fallback enabled), a **finding-specific mock** is used: guidance is tailored from title, asset name, port/service, and CWE (e.g. Redis AUTH vs TLS ciphers vs SQL parameterization)—not a single generic SQL template. Service path: `AIRemediationService.generate(VulnerabilityContext)`. Output is saved to `vulnerability.remediation` (and `threat_intel_metadata.ai_remediation`).
 
 ## AI False-Positive Analysis (Prompt 15)
 
