@@ -30,6 +30,20 @@ logger = logging.getLogger(__name__)
 _MAX_RESULT_CHARS = 200_000
 
 
+def _load_scan(session: Session, scan_uuid: UUID, task: Any, scan_id: str) -> Scan:
+    """Load scan for a Celery task; retry briefly if the API commit has not landed yet."""
+    scan = (
+        session.query(Scan)
+        .options(selectinload(Scan.assets))
+        .filter(Scan.id == scan_uuid)
+        .one_or_none()
+    )
+    if scan is None:
+        logger.warning("Scan %s not found yet — retrying (API commit race)", scan_id)
+        raise task.retry(countdown=2, max_retries=5)
+    return scan
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -244,7 +258,7 @@ def _scanner_python_path() -> None:
         sys.path.insert(0, str(scanner_path))
 
 
-@celery_app.task(name="scans.run_nexusec", bind=True, max_retries=0)
+@celery_app.task(name="scans.run_nexusec", bind=True, max_retries=5, default_retry_delay=2)
 def run_nexusec_scan(self, scan_id: str) -> dict[str, Any]:
     """Run the custom asyncio NexuSec scanner engine and ingest findings."""
     _scanner_python_path()
@@ -256,14 +270,7 @@ def run_nexusec_scan(self, scan_id: str) -> dict[str, Any]:
         return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
 
     with session_scope() as session:
-        scan = (
-            session.query(Scan)
-            .options(selectinload(Scan.assets))
-            .filter(Scan.id == scan_uuid)
-            .one_or_none()
-        )
-        if scan is None:
-            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+        scan = _load_scan(session, scan_uuid, self, scan_id)
 
         scan.celery_task_id = self.request.id
         _update_scan(
@@ -362,7 +369,7 @@ def run_nexusec_scan(self, scan_id: str) -> dict[str, Any]:
         return out
 
 
-@celery_app.task(name="scans.run_nmap", bind=True, max_retries=0)
+@celery_app.task(name="scans.run_nmap", bind=True, max_retries=5, default_retry_delay=2)
 def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
     """
     Execute an asynchronous Nmap job and persist status/results on the Scan row.
@@ -374,14 +381,7 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
         return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
 
     with session_scope() as session:
-        scan = (
-            session.query(Scan)
-            .options(selectinload(Scan.assets))
-            .filter(Scan.id == scan_uuid)
-            .one_or_none()
-        )
-        if scan is None:
-            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+        scan = _load_scan(session, scan_uuid, self, scan_id)
 
         scan.celery_task_id = self.request.id
         _update_scan(
@@ -526,7 +526,7 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
         return out
 
 
-@celery_app.task(name="scans.run_nuclei", bind=True, max_retries=0)
+@celery_app.task(name="scans.run_nuclei", bind=True, max_retries=5, default_retry_delay=2)
 def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
     """Execute Nuclei JSONL scan and ingest normalized findings."""
     try:
@@ -536,14 +536,7 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
         return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
 
     with session_scope() as session:
-        scan = (
-            session.query(Scan)
-            .options(selectinload(Scan.assets))
-            .filter(Scan.id == scan_uuid)
-            .one_or_none()
-        )
-        if scan is None:
-            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+        scan = _load_scan(session, scan_uuid, self, scan_id)
 
         scan.celery_task_id = self.request.id
         _update_scan(
@@ -733,7 +726,7 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
         return out
 
 
-@celery_app.task(name="scans.run_openvas", bind=True, max_retries=0)
+@celery_app.task(name="scans.run_openvas", bind=True, max_retries=5, default_retry_delay=2)
 def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
     """Execute OpenVAS/GVM mock (or imported XML) and ingest normalized findings."""
     try:
@@ -743,14 +736,7 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
         return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
 
     with session_scope() as session:
-        scan = (
-            session.query(Scan)
-            .options(selectinload(Scan.assets))
-            .filter(Scan.id == scan_uuid)
-            .one_or_none()
-        )
-        if scan is None:
-            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+        scan = _load_scan(session, scan_uuid, self, scan_id)
 
         scan.celery_task_id = self.request.id
         _update_scan(
@@ -921,7 +907,7 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
         return out
 
 
-@celery_app.task(name="scans.run_zap", bind=True, max_retries=0)
+@celery_app.task(name="scans.run_zap", bind=True, max_retries=5, default_retry_delay=2)
 def run_zap_scan(self, scan_id: str) -> dict[str, Any]:
     """Execute OWASP ZAP mock (or imported JSON) and ingest normalized findings."""
     try:
@@ -931,14 +917,7 @@ def run_zap_scan(self, scan_id: str) -> dict[str, Any]:
         return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
 
     with session_scope() as session:
-        scan = (
-            session.query(Scan)
-            .options(selectinload(Scan.assets))
-            .filter(Scan.id == scan_uuid)
-            .one_or_none()
-        )
-        if scan is None:
-            return {"scan_id": scan_id, "status": "failed", "error": "scan not found"}
+        scan = _load_scan(session, scan_uuid, self, scan_id)
 
         scan.celery_task_id = self.request.id
         _update_scan(

@@ -83,10 +83,8 @@ class ScanService:
 
         task_id: Optional[str] = None
         if payload.start_immediately:
+            # enqueue() commits so Celery workers see the row before .delay()
             task_id = await self.enqueue(scan.id, engine=payload.engine)
-            scan.status = ScanStatus.QUEUED
-            scan.celery_task_id = task_id
-            await self.db.flush()
 
         await self.db.refresh(scan, attribute_names=["assets"])
         # reload with assets
@@ -96,6 +94,11 @@ class ScanService:
     async def enqueue(self, scan_id: UUID, *, engine: Optional[ScannerEngine] = None) -> str:
         scan = await self._get_scan(scan_id)
         eng = engine or scan.engine
+
+        # Critical: commit before broker publish. Otherwise an idle scanner-worker
+        # can claim the task before Postgres has the Scan row → "scan not found"
+        # and the UI stays QUEUED forever.
+        await self.db.commit()
 
         if eng == ScannerEngine.NMAP:
             from workers.tasks import run_nmap_scan

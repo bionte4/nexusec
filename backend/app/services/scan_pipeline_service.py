@@ -141,10 +141,8 @@ class ScanPipelineService:
             self.db.add(ScanAsset(scan_id=follow_up.id, asset_id=asset.id))
         await self.db.flush()
 
+        # enqueue commits discovery + follow_up so both rows exist before nmap.delay()
         task_id = await self.scans.enqueue(discovery.id, engine=discovery.engine)
-        discovery.status = ScanStatus.QUEUED
-        discovery.celery_task_id = task_id
-        await self.db.flush()
 
         discovery = await self.scans._get_scan(discovery.id)
         follow_up = await self.scans._get_scan(follow_up.id)
