@@ -244,3 +244,32 @@ async def test_nist_csf_report_buckets() -> None:
     assert "PR.DS-02" in control_ids
     assert len(report.findings) == 2
     assert report.recommendations
+
+
+@pytest.mark.asyncio
+async def test_iso27001_report_scoped_to_asset() -> None:
+    a1 = _asset(name="host-a")
+    a2 = _asset(name="host-b")
+    vulns = [
+        _vuln(a1, title="Only on A", compliance={"iso_27001": ["A.8.8"]}),
+        _vuln(a2, title="Only on B", compliance={"iso_27001": ["A.8.12"]}),
+    ]
+    service = ComplianceReportService(MagicMock())
+
+    async def fake_load_scope(*, asset_id=None):  # noqa: ANN001
+        if asset_id is None:
+            return vulns, [a1, a2]
+        return (
+            [v for v in vulns if v.asset_id == asset_id],
+            [a for a in (a1, a2) if a.id == asset_id],
+        )
+
+    service._load_scope = fake_load_scope  # type: ignore[method-assign]
+    report = await service.generate_iso27001(_user(), asset_id=a1.id)
+
+    assert report.metadata.scope_asset_id == a1.id
+    assert report.metadata.scope_asset_name == "host-a"
+    assert "Scoped to asset" in (report.metadata.scope_notes or "")
+    assert len(report.findings) == 1
+    assert report.findings[0].title == "Only on A"
+    assert report.metadata.scope_total_assets == 1

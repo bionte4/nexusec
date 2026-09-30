@@ -329,17 +329,34 @@ export const api = {
     })
   },
 
-  getComplianceReport(kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf') {
-    return request<Record<string, unknown>>(`/api/v1/reports/${kind}`)
+  getComplianceReport(
+    kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf',
+    opts: { asset_id?: string } = {},
+  ) {
+    const q = new URLSearchParams()
+    if (opts.asset_id) q.set('asset_id', opts.asset_id)
+    const qs = q.toString()
+    return request<Record<string, unknown>>(
+      `/api/v1/reports/${kind}${qs ? `?${qs}` : ''}`,
+    )
   },
 
-  async downloadCompliancePdf(kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf') {
+  async downloadCompliancePdf(
+    kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf',
+    opts: { asset_id?: string } = {},
+  ) {
     const headers = new Headers()
     const token = getToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
     const orgId = getOrganizationId()
     if (orgId) headers.set('X-Organization-Id', orgId)
-    const res = await fetch(`/api/v1/reports/${kind}/pdf`, { headers })
+    const q = new URLSearchParams()
+    if (opts.asset_id) q.set('asset_id', opts.asset_id)
+    const qs = q.toString()
+    const res = await fetch(
+      `/api/v1/reports/${kind}/pdf${qs ? `?${qs}` : ''}`,
+      { headers },
+    )
     if (!res.ok) {
       let detail = res.statusText
       try {
@@ -354,7 +371,8 @@ export const api = {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `nexusec-${kind}-${new Date().toISOString().slice(0, 10)}.pdf`
+    const assetSuffix = opts.asset_id ? `-asset-${opts.asset_id.slice(0, 8)}` : ''
+    a.download = `nexusec-${kind}${assetSuffix}-${new Date().toISOString().slice(0, 10)}.pdf`
     a.click()
     URL.revokeObjectURL(url)
   },

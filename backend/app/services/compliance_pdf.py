@@ -68,6 +68,13 @@ def render_compliance_pdf(report: ComplianceReport) -> bytes:
 
     story: list = []
     meta = report.metadata
+    scope_line = (
+        f"<b>Scope:</b> {meta.scope_total_assets} assets "
+        f"({meta.scope_cde_assets} CDE) · {meta.scope_active_findings} active findings"
+    )
+    if meta.scope_asset_id is not None:
+        asset_label = meta.scope_asset_name or str(meta.scope_asset_id)
+        scope_line += f"<br/><b>Asset filter:</b> {_esc(asset_label)} ({meta.scope_asset_id})"
     story.append(Paragraph(_esc(meta.title), title_style))
     story.append(
         Paragraph(
@@ -75,8 +82,7 @@ def render_compliance_pdf(report: ComplianceReport) -> bytes:
             f"<b>Generated:</b> {_esc(meta.generated_at.isoformat())}<br/>"
             f"<b>Auditor:</b> {_esc(meta.auditor_name)} ({_esc(meta.auditor_email)}) "
             f"· {_esc(meta.auditor_role)}<br/>"
-            f"<b>Scope:</b> {meta.scope_total_assets} assets "
-            f"({meta.scope_cde_assets} CDE) · {meta.scope_active_findings} active findings",
+            f"{scope_line}",
             small,
         )
     )

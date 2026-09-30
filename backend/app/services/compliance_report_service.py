@@ -122,8 +122,13 @@ class ComplianceReportService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def generate_iso27001(self, auditor: User) -> ComplianceReport:
-        vulns, assets = await self._load_scope()
+    async def generate_iso27001(
+        self,
+        auditor: User,
+        *,
+        asset_id: Optional[uuid.UUID] = None,
+    ) -> ComplianceReport:
+        vulns, assets = await self._load_scope(asset_id=asset_id)
         rows = self._to_rows(vulns, control_keys=("iso_27001", "iso27001"))
         buckets = self._bucket_by_control(
             rows,
@@ -139,7 +144,12 @@ class ComplianceReportService:
             standard="ISO/IEC 27001:2022 Annex A",
             assets=assets,
             active_count=len(active),
-            scope_notes="Findings mapped to Annex A technical controls (emphasis A.8.8).",
+            scope_notes=self._scope_notes(
+                "Findings mapped to Annex A technical controls (emphasis A.8.8).",
+                assets=assets,
+                asset_id=asset_id,
+            ),
+            asset_id=asset_id,
         )
         sections = [
             ReportSection(
@@ -198,8 +208,13 @@ class ComplianceReportService:
             ],
         )
 
-    async def generate_pci_dss(self, auditor: User) -> ComplianceReport:
-        vulns, assets = await self._load_scope()
+    async def generate_pci_dss(
+        self,
+        auditor: User,
+        *,
+        asset_id: Optional[uuid.UUID] = None,
+    ) -> ComplianceReport:
+        vulns, assets = await self._load_scope(asset_id=asset_id)
         cde_asset_ids = {a.id for a in assets if a.is_cde_scope}
         # PCI focus: Req 11 + anything on CDE assets
         rows_all = self._to_rows(vulns, control_keys=("pci_dss", "pci"))
@@ -229,10 +244,13 @@ class ComplianceReportService:
             standard="PCI DSS v4.0 Requirement 11",
             assets=assets,
             active_count=len(active),
-            scope_notes=(
+            scope_notes=self._scope_notes(
                 f"CDE assets in inventory: {len(cde_asset_ids)}. "
-                "Focus on Req 11 vulnerability scanning and CDE exposure."
+                "Focus on Req 11 vulnerability scanning and CDE exposure.",
+                assets=assets,
+                asset_id=asset_id,
             ),
+            asset_id=asset_id,
         )
         sections = [
             ReportSection(
@@ -292,8 +310,13 @@ class ComplianceReportService:
             ],
         )
 
-    async def generate_gdpr(self, auditor: User) -> ComplianceReport:
-        vulns, assets = await self._load_scope()
+    async def generate_gdpr(
+        self,
+        auditor: User,
+        *,
+        asset_id: Optional[uuid.UUID] = None,
+    ) -> ComplianceReport:
+        vulns, assets = await self._load_scope(asset_id=asset_id)
         gdpr_vulns = [v for v in vulns if _is_gdpr_risk(v, v.compliance_metadata or {})]
         rows = self._to_rows(gdpr_vulns, control_keys=("gdpr", "iso_27001"))
         # Bucket by GDPR article tags when present, else Art.32
@@ -319,9 +342,12 @@ class ComplianceReportService:
             standard="GDPR (EU) 2016/679 — Arts. 5, 25, 32, 33",
             assets=assets,
             active_count=len(active),
-            scope_notes=(
-                "Includes findings flagged gdpr_risk_flag / GDPR tags / PII-related keywords."
+            scope_notes=self._scope_notes(
+                "Includes findings flagged gdpr_risk_flag / GDPR tags / PII-related keywords.",
+                assets=assets,
+                asset_id=asset_id,
             ),
+            asset_id=asset_id,
         )
         sections = [
             ReportSection(
@@ -380,9 +406,14 @@ class ComplianceReportService:
             ],
         )
 
-    async def generate_nist_csf(self, auditor: User) -> ComplianceReport:
+    async def generate_nist_csf(
+        self,
+        auditor: User,
+        *,
+        asset_id: Optional[uuid.UUID] = None,
+    ) -> ComplianceReport:
         """NIST CSF 2.0 categories + linked SP 800-53 Rev.5 controls."""
-        vulns, assets = await self._load_scope()
+        vulns, assets = await self._load_scope(asset_id=asset_id)
         csf_rows = self._to_rows(vulns, control_keys=("nist_csf",))
         # Enrich control list with 800-53 for display when CSF empty but 800-53 present
         for row, vuln in zip(csf_rows, vulns):
@@ -407,10 +438,13 @@ class ComplianceReportService:
             standard="NIST Cybersecurity Framework 2.0 + SP 800-53 Rev.5",
             assets=assets,
             active_count=len(active),
-            scope_notes=(
+            scope_notes=self._scope_notes(
                 "Findings mapped to NIST CSF categories (ID/PR/DE/RS) with related "
-                "SP 800-53 technical controls (RA-5, SI-2, etc.)."
+                "SP 800-53 technical controls (RA-5, SI-2, etc.).",
+                assets=assets,
+                asset_id=asset_id,
             ),
+            asset_id=asset_id,
         )
         sections = [
             ReportSection(
@@ -457,11 +491,33 @@ class ComplianceReportService:
 
     async def _load_scope(
         self,
+        *,
+        asset_id: Optional[uuid.UUID] = None,
     ) -> tuple[list[Vulnerability], list[Asset]]:
         vuln_stmt = select(Vulnerability).options(selectinload(Vulnerability.asset))
+        if asset_id is not None:
+            vuln_stmt = vuln_stmt.where(Vulnerability.asset_id == asset_id)
         vulns = list((await self.db.execute(vuln_stmt)).scalars().all())
-        assets = list((await self.db.execute(select(Asset))).scalars().all())
+
+        asset_stmt = select(Asset)
+        if asset_id is not None:
+            asset_stmt = asset_stmt.where(Asset.id == asset_id)
+        assets = list((await self.db.execute(asset_stmt)).scalars().all())
         return vulns, assets
+
+    @staticmethod
+    def _scope_notes(
+        base: str,
+        *,
+        assets: list[Asset],
+        asset_id: Optional[uuid.UUID],
+    ) -> str:
+        if asset_id is None:
+            return base
+        if assets:
+            name = assets[0].name
+            return f"Scoped to asset '{name}' ({asset_id}). {base}"
+        return f"Scoped to asset_id={asset_id} (asset not found in inventory). {base}"
 
     def _to_rows(
         self,
@@ -535,7 +591,9 @@ class ComplianceReportService:
         assets: list[Asset],
         active_count: int,
         scope_notes: Optional[str] = None,
+        asset_id: Optional[uuid.UUID] = None,
     ) -> ReportMetadata:
+        scope_name = assets[0].name if asset_id is not None and assets else None
         return ReportMetadata(
             report_id=uuid.uuid4(),
             report_type=report_type,
@@ -550,5 +608,7 @@ class ComplianceReportService:
             scope_cde_assets=sum(1 for a in assets if a.is_cde_scope),
             scope_active_findings=active_count,
             scope_notes=scope_notes,
+            scope_asset_id=asset_id,
+            scope_asset_name=scope_name,
             export_format="json_pdf_ready",
         )

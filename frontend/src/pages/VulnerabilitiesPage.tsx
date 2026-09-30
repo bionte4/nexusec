@@ -367,22 +367,40 @@ export function VulnerabilitiesPage() {
     setBusy(true)
     setNotice(null)
     setError(null)
+    const scopeOpts = filterAssetId ? { asset_id: filterAssetId } : {}
     try {
       if (usingMock || token === 'demo') {
         setError(t('vulns.reportLiveRequired'))
         return
       }
       if (format === 'pdf') {
-        await api.downloadCompliancePdf(kind)
-        setNotice(t('vulns.reportPdfExported', { kind }))
+        await api.downloadCompliancePdf(kind, scopeOpts)
+        setNotice(
+          filterAssetId
+            ? t('vulns.reportPdfExportedScoped', {
+                kind,
+                id: filterAssetId.slice(0, 8),
+              })
+            : t('vulns.reportPdfExported', { kind }),
+        )
       } else {
-        const report = await api.getComplianceReport(kind)
+        const report = await api.getComplianceReport(kind, scopeOpts)
+        const assetSuffix = filterAssetId
+          ? `-asset-${filterAssetId.slice(0, 8)}`
+          : ''
         downloadText(
-          `nexusec-${kind}-${new Date().toISOString().slice(0, 10)}.json`,
+          `nexusec-${kind}${assetSuffix}-${new Date().toISOString().slice(0, 10)}.json`,
           JSON.stringify(report, null, 2),
           'application/json',
         )
-        setNotice(t('vulns.reportExported', { kind }))
+        setNotice(
+          filterAssetId
+            ? t('vulns.reportExportedScoped', {
+                kind,
+                id: filterAssetId.slice(0, 8),
+              })
+            : t('vulns.reportExported', { kind }),
+        )
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('vulns.reportFailed'))
@@ -403,6 +421,7 @@ export function VulnerabilitiesPage() {
           </h1>
           <p className="mt-1 text-sm text-surface-400">{t('vulns.subtitle')}</p>
         </div>
+        <div className="flex flex-col items-end gap-1">
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -477,6 +496,10 @@ export function VulnerabilitiesPage() {
           >
             NIST PDF
           </button>
+        </div>
+        {filterAssetId ? (
+          <p className="text-[10px] text-accent">{t('vulns.reportScopeHint')}</p>
+        ) : null}
         </div>
       </header>
 

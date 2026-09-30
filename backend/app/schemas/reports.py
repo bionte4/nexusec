@@ -25,6 +25,8 @@ class ReportMetadata(BaseModel):
     scope_cde_assets: int = 0
     scope_active_findings: int
     scope_notes: Optional[str] = None
+    scope_asset_id: Optional[uuid.UUID] = None
+    scope_asset_name: Optional[str] = None
     export_format: str = "json_pdf_ready"
 
 

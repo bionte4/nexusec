@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,15 +28,17 @@ async def _generate(
     kind: str,
     current_user: RequireSocOrAbove,
     service: ComplianceReportService,
+    *,
+    asset_id: uuid.UUID | None = None,
 ) -> ComplianceReport:
     if kind == "iso27001":
-        return await service.generate_iso27001(current_user)
+        return await service.generate_iso27001(current_user, asset_id=asset_id)
     if kind == "pci-dss":
-        return await service.generate_pci_dss(current_user)
+        return await service.generate_pci_dss(current_user, asset_id=asset_id)
     if kind == "gdpr":
-        return await service.generate_gdpr(current_user)
+        return await service.generate_gdpr(current_user, asset_id=asset_id)
     if kind == "nist-csf":
-        return await service.generate_nist_csf(current_user)
+        return await service.generate_nist_csf(current_user, asset_id=asset_id)
     raise HTTPException(status_code=404, detail=f"Unknown report kind: {kind}")
 
 
@@ -45,9 +49,12 @@ async def _generate(
 )
 async def iso27001_report(
     current_user: RequireSocOrAbove,
+    asset_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings for this asset"
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> ComplianceReport:
-    return await service.generate_iso27001(current_user)
+    return await service.generate_iso27001(current_user, asset_id=asset_id)
 
 
 @router.get(
@@ -57,9 +64,12 @@ async def iso27001_report(
 )
 async def pci_dss_report(
     current_user: RequireSocOrAbove,
+    asset_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings for this asset"
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> ComplianceReport:
-    return await service.generate_pci_dss(current_user)
+    return await service.generate_pci_dss(current_user, asset_id=asset_id)
 
 
 @router.get(
@@ -69,9 +79,12 @@ async def pci_dss_report(
 )
 async def gdpr_report(
     current_user: RequireSocOrAbove,
+    asset_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings for this asset"
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> ComplianceReport:
-    return await service.generate_gdpr(current_user)
+    return await service.generate_gdpr(current_user, asset_id=asset_id)
 
 
 @router.get(
@@ -81,9 +94,12 @@ async def gdpr_report(
 )
 async def nist_csf_report(
     current_user: RequireSocOrAbove,
+    asset_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings for this asset"
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> ComplianceReport:
-    return await service.generate_nist_csf(current_user)
+    return await service.generate_nist_csf(current_user, asset_id=asset_id)
 
 
 @router.get(
@@ -94,6 +110,9 @@ async def nist_csf_report(
 async def compliance_report_pdf(
     kind: str,
     current_user: RequireSocOrAbove,
+    asset_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings for this asset"
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> Response:
     if kind not in _REPORT_KINDS:
@@ -101,9 +120,12 @@ async def compliance_report_pdf(
             status_code=404,
             detail=f"Unknown report kind. Expected one of: {', '.join(_REPORT_KINDS)}",
         )
-    report = await _generate(kind, current_user, service)
+    report = await _generate(kind, current_user, service, asset_id=asset_id)
     pdf_bytes = render_compliance_pdf(report)
-    filename = f"nexusec-{kind}-{report.metadata.generated_at.date().isoformat()}.pdf"
+    suffix = f"-asset-{str(asset_id)[:8]}" if asset_id else ""
+    filename = (
+        f"nexusec-{kind}{suffix}-{report.metadata.generated_at.date().isoformat()}.pdf"
+    )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -144,24 +166,28 @@ async def list_report_types(_: RequireSocOrAbove) -> dict[str, list[dict[str, st
                 "path": "/api/v1/reports/iso27001",
                 "pdf": "/api/v1/reports/iso27001/pdf",
                 "standard": "ISO/IEC 27001:2022 Annex A",
+                "query": "asset_id (optional UUID)",
             },
             {
                 "id": "pci_dss",
                 "path": "/api/v1/reports/pci-dss",
                 "pdf": "/api/v1/reports/pci-dss/pdf",
                 "standard": "PCI DSS v4.0 Requirement 11",
+                "query": "asset_id (optional UUID)",
             },
             {
                 "id": "gdpr",
                 "path": "/api/v1/reports/gdpr",
                 "pdf": "/api/v1/reports/gdpr/pdf",
                 "standard": "GDPR Arts. 5/25/32/33",
+                "query": "asset_id (optional UUID)",
             },
             {
                 "id": "nist_csf",
                 "path": "/api/v1/reports/nist-csf",
                 "pdf": "/api/v1/reports/nist-csf/pdf",
                 "standard": "NIST CSF 2.0 + SP 800-53 Rev.5",
+                "query": "asset_id (optional UUID)",
             },
         ]
     }

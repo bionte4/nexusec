@@ -403,19 +403,24 @@ UI: **SOC Chat** — tanya dalam bahasa natural, contoh:
 ## 8. Laporan compliance
 
 ```bash
+# Org-wide
 curl -s -H "$AUTH" "$API/api/v1/reports/iso27001" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/pci-dss" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/gdpr" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/nist-csf" | python3 -m json.tool
 
-# PDF (binary)
+# Per asset (opsional)
+curl -s -H "$AUTH" "$API/api/v1/reports/iso27001?asset_id=$ASSET_ID" | python3 -m json.tool
+curl -s -H "$AUTH" "$API/api/v1/reports/iso27001/pdf?asset_id=$ASSET_ID" -o iso27001-asset.pdf
+
+# PDF org-wide
 curl -s -H "$AUTH" "$API/api/v1/reports/iso27001/pdf" -o iso27001.pdf
 curl -s -H "$AUTH" "$API/api/v1/reports/nist-csf/pdf" -o nist.pdf
 ```
 
 Gunakan setelah finding punya `compliance_metadata` (ISO Annex A, PCI Req.11, GDPR Art.32, NIST CSF/800-53, dll.).
 
-Di UI: tombol **ISO / PCI / GDPR / NIST** (JSON) dan **… PDF**. Detail finding: **Suggest NIST** → tinjau → **Accept**.
+Di UI Remediation: filter aset (dari **Assets** → findings, atau `?asset_id=`), lalu tombol **ISO / PCI / GDPR / NIST** (JSON/PDF) otomatis scoped ke aset itu. Metadata laporan berisi `scope_asset_id` / `scope_asset_name`. Detail finding: action remediation (status, owner, AI remediation, tiket).
 
 Backfill finding lama (Admin):
 
