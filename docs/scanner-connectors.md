@@ -313,6 +313,19 @@ POST /api/v1/normalize/preview
 
 Urutan VA yang disarankan: **Nmap (discovery) → Nuclei / OpenVAS / NexuSec (VA) → triage SOC**.
 
+### Pipeline satu klik
+
+`POST /api/v1/scans/pipeline` membuat dua job berantai:
+
+1. Discovery (`nmap`) langsung di-queue  
+2. VA (`nuclei` | `nexusec` | `openvas`) menunggu sampai discovery **completed**, lalu di-enqueue otomatis  
+
+Di UI Scans: pilih aset → pilih VA engine → **Start discovery → VA**.
+
+### Import laporan
+
+`POST /api/v1/scans/import-report` menerima raw XML/JSONL, membuat scan `completed`, lalu ingest finding (batas 2MB).
+
 ---
 
 ## 8. Normalisasi & deduplikasi

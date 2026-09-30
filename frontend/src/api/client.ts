@@ -18,6 +18,7 @@ import type {
   ScanScheduleListResponse,
   SocChatResponse,
   Scan,
+  ScannerEngine,
   UserListResponse,
   VulnListParams,
   Vulnerability,
@@ -282,6 +283,41 @@ export const api = {
 
   createScan(payload: ScanCreatePayload) {
     return request<ScanEnqueueResponse>('/api/v1/scans', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  createVaPipeline(payload: {
+    name: string
+    asset_ids: string[]
+    va_engine?: ScannerEngine
+    va_config?: Record<string, unknown>
+  }) {
+    return request<{
+      pipeline_id: string
+      discovery: Scan
+      va: Scan
+      celery_task_id: string | null
+      message: string
+    }>('/api/v1/scans/pipeline', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  importScanReport(payload: {
+    name: string
+    engine: ScannerEngine
+    asset_ids: string[]
+    raw: string
+  }) {
+    return request<{
+      scan: Scan
+      finding_count: number
+      ingest: Record<string, number>
+      message: string
+    }>('/api/v1/scans/import-report', {
       method: 'POST',
       body: JSON.stringify(payload),
     })

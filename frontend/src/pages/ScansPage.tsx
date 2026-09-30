@@ -120,6 +120,14 @@ export function ScansPage() {
     config: {} as Record<string, unknown>,
   })
 
+  const [pipelineVaEngine, setPipelineVaEngine] = useState<ScannerEngine>('nuclei')
+  const [importForm, setImportForm] = useState({
+    name: '',
+    engine: 'openvas' as ScannerEngine,
+    asset_id: '',
+    raw: '',
+  })
+
   type PresetId = 'discovery_nmap' | 'va_nuclei' | 'va_nexusec' | 'va_openvas'
 
   function applyPreset(preset: PresetId) {
@@ -321,6 +329,60 @@ export function ScansPage() {
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('scans.createFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onCreatePipeline() {
+    if (!canWrite || !form.asset_id) return
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (user?.role === 'super_admin' && selectedOrg) {
+        setOrganizationId(selectedOrg)
+      }
+      const res = await api.createVaPipeline({
+        name: form.name.trim() || t('scans.pipelineDefaultName'),
+        asset_ids: [form.asset_id],
+        va_engine: pipelineVaEngine,
+      })
+      setNotice(res.message)
+      await load()
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('scans.pipelineFailed'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onImportReport(e: FormEvent) {
+    e.preventDefault()
+    if (!canWrite || !importForm.asset_id || !importForm.raw.trim()) return
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (user?.role === 'super_admin' && selectedOrg) {
+        setOrganizationId(selectedOrg)
+      }
+      const assetId = importForm.asset_id || form.asset_id
+      const res = await api.importScanReport({
+        name: importForm.name.trim() || t('scans.importDefaultName'),
+        engine: importForm.engine,
+        asset_ids: [assetId],
+        raw: importForm.raw,
+      })
+      setNotice(
+        `${res.message} · inserted ${res.ingest.inserted ?? 0}, updated ${res.ingest.updated ?? 0}`,
+      )
+      setImportForm((f) => ({ ...f, name: '', raw: '' }))
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('scans.importFailed'))
     } finally {
       setBusy(false)
     }
@@ -652,7 +714,8 @@ export function ScansPage() {
                   {t('scans.openvasModeHint')}
                 </p>
               </div>
-            ) : null}            <label className="flex items-center gap-2 text-xs text-surface-300">
+            ) : null}
+            <label className="flex items-center gap-2 text-xs text-surface-300">
               <input
                 type="checkbox"
                 checked={form.start_immediately}
@@ -669,6 +732,33 @@ export function ScansPage() {
             >
               {busy ? t('scans.queuing') : t('scans.create')}
             </button>
+            <div className="space-y-2 border-t border-surface-700 pt-3">
+              <p className="text-[11px] font-medium text-surface-300">
+                {t('scans.pipelineTitle')}
+              </p>
+              <p className="text-[10px] text-surface-500">
+                {t('scans.pipelineHint')}
+              </p>
+              <select
+                value={pipelineVaEngine}
+                onChange={(e) =>
+                  setPipelineVaEngine(e.target.value as ScannerEngine)
+                }
+                className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+              >
+                <option value="nuclei">nuclei</option>
+                <option value="nexusec">nexusec</option>
+                <option value="openvas">openvas</option>
+              </select>
+              <button
+                type="button"
+                disabled={busy || !form.asset_id}
+                onClick={() => void onCreatePipeline()}
+                className="w-full rounded-lg border border-accent/50 px-3 py-2 text-sm font-semibold text-accent transition hover:bg-accent/10 disabled:opacity-50"
+              >
+                {t('scans.pipelineStart')}
+              </button>
+            </div>
           </form>
         ) : (
           <div className="panel rounded-xl p-5 text-sm text-surface-400 lg:col-span-1">
@@ -759,6 +849,74 @@ export function ScansPage() {
           )}
         </div>
       </div>
+
+      {canWrite ? (
+        <section className="panel space-y-3 rounded-xl p-5">
+          <h2 className="text-sm font-medium">{t('scans.importTitle')}</h2>
+          <p className="text-xs text-surface-400">{t('scans.importHint')}</p>
+          <form onSubmit={onImportReport} className="grid gap-3 md:grid-cols-2">
+            <input
+              value={importForm.name}
+              onChange={(e) =>
+                setImportForm({ ...importForm, name: e.target.value })
+              }
+              placeholder={t('scans.scanName')}
+              className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <select
+              value={importForm.asset_id || form.asset_id}
+              onChange={(e) =>
+                setImportForm({ ...importForm, asset_id: e.target.value })
+              }
+              required
+              className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+            >
+              <option value="">{t('scans.selectAsset')}</option>
+              {assets.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.asset_type})
+                </option>
+              ))}
+            </select>
+            <select
+              value={importForm.engine}
+              onChange={(e) =>
+                setImportForm({
+                  ...importForm,
+                  engine: e.target.value as ScannerEngine,
+                })
+              }
+              className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent md:col-span-2"
+            >
+              <option value="nmap">nmap XML</option>
+              <option value="nuclei">nuclei JSONL</option>
+              <option value="nexusec">nexusec JSON</option>
+              <option value="openvas">openvas / GVM XML</option>
+            </select>
+            <textarea
+              required
+              value={importForm.raw}
+              onChange={(e) =>
+                setImportForm({ ...importForm, raw: e.target.value })
+              }
+              placeholder={t('scans.importRawPlaceholder')}
+              rows={6}
+              className="rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 font-mono text-xs outline-none focus:border-accent md:col-span-2"
+            />
+            <button
+              type="submit"
+              disabled={
+                busy ||
+                !importForm.raw.trim() ||
+                !(importForm.asset_id || form.asset_id)
+              }
+              className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-surface-950 disabled:opacity-50 md:col-span-2"
+            >
+              {t('scans.importSubmit')}
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       <section className="space-y-4">
         <div>

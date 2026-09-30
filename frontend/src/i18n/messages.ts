@@ -135,6 +135,18 @@ const en = {
     openvasModeGmp: 'gmp — live Greenbone (set GVM_* in .env)',
     openvasModeHint:
       'Needs GVM_USERNAME/PASSWORD and GVM_SOCKET or GVM_HOST. See docs/greenbone-gvm.md. Default follows OPENVAS_MODE.',
+    pipelineTitle: 'VA pipeline (one click)',
+    pipelineHint: 'Runs nmap discovery, then automatically starts the selected VA engine on the same asset.',
+    pipelineStart: 'Start discovery → VA',
+    pipelineDefaultName: 'VA pipeline',
+    pipelineFailed: 'Failed to start VA pipeline',
+    importTitle: 'Import scanner report',
+    importHint:
+      'Paste raw nmap XML, nuclei JSONL, nexusec JSON, or OpenVAS/GVM XML. Findings are normalized and ingested immediately.',
+    importRawPlaceholder: 'Paste raw scanner output here…',
+    importSubmit: 'Import & ingest',
+    importDefaultName: 'Imported report',
+    importFailed: 'Failed to import report',
     connectorsTitle: 'Scanner connectors',
     connectorsSubtitle: 'Pick a ready engine card to prefill a VA/discovery job.',
     connectorReady: 'Ready',
@@ -504,6 +516,19 @@ const id: Messages = {
     openvasModeGmp: 'gmp — Greenbone live (isi GVM_* di .env)',
     openvasModeHint:
       'Perlu GVM_USERNAME/PASSWORD dan GVM_SOCKET atau GVM_HOST. Lihat docs/greenbone-gvm.md.',
+    pipelineTitle: 'Pipeline VA (satu klik)',
+    pipelineHint:
+      'Menjalankan discovery nmap, lalu otomatis memulai engine VA yang dipilih pada aset yang sama.',
+    pipelineStart: 'Jalankan discovery → VA',
+    pipelineDefaultName: 'Pipeline VA',
+    pipelineFailed: 'Gagal memulai pipeline VA',
+    importTitle: 'Impor laporan scanner',
+    importHint:
+      'Tempel output mentah nmap XML, nuclei JSONL, nexusec JSON, atau OpenVAS/GVM XML. Finding dinormalisasi dan diingest langsung.',
+    importRawPlaceholder: 'Tempel output mentah scanner di sini…',
+    importSubmit: 'Impor & ingest',
+    importDefaultName: 'Laporan diimpor',
+    importFailed: 'Gagal mengimpor laporan',
     connectorsTitle: 'Konektor scanner',
     connectorsSubtitle: 'Pilih kartu engine siap pakai untuk mengisi form VA/discovery.',
     connectorReady: 'Siap',

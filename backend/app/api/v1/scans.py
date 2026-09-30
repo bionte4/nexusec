@@ -18,6 +18,11 @@ from app.schemas.scan import (
 )
 from app.services.scan_diff_service import ScanDiffError, ScanDiffService
 from app.services.scan_discovery_service import ScanDiscoveryError, ScanDiscoveryService
+from app.services.scan_pipeline_service import (
+    PipelineCreateError,
+    ScanImportService,
+    ScanPipelineService,
+)
 from app.services.scan_service import (
     ScanNotFoundError,
     ScanService,
@@ -59,6 +64,70 @@ async def create_scan(
 
     message = f"Scan queued (task={task_id})" if task_id else "Scan created (not started)"
     return ScanEnqueueResponse(scan=scan, celery_task_id=task_id, message=message)
+
+
+class PipelineCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    asset_ids: list[uuid.UUID] = Field(min_length=1)
+    va_engine: ScannerEngine = ScannerEngine.NUCLEI
+    va_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class ImportReportRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    engine: ScannerEngine
+    asset_ids: list[uuid.UUID] = Field(min_length=1)
+    raw: str = Field(min_length=1, max_length=2_000_000)
+
+
+@router.post(
+    "/pipeline",
+    status_code=status.HTTP_201_CREATED,
+    summary="Start VA pipeline: discovery (nmap) then VA engine on same assets",
+)
+async def create_va_pipeline(
+    payload: PipelineCreateRequest,
+    tenant: RequireTenant,
+    current_user: RequirePentesterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    try:
+        return await ScanPipelineService(db).create(
+            organization_id=org_id,
+            created_by_id=current_user.id,
+            name=payload.name,
+            asset_ids=payload.asset_ids,
+            va_engine=payload.va_engine,
+            va_config=payload.va_config or None,
+        )
+    except (PipelineCreateError, ScanValidationError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post(
+    "/import-report",
+    status_code=status.HTTP_201_CREATED,
+    summary="Import raw scanner report (nmap/nuclei/nexusec/openvas) and ingest findings",
+)
+async def import_scan_report(
+    payload: ImportReportRequest,
+    tenant: RequireTenant,
+    current_user: RequirePentesterOrAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    try:
+        return await ScanImportService(db).import_report(
+            organization_id=org_id,
+            created_by_id=current_user.id,
+            name=payload.name,
+            engine=payload.engine,
+            asset_ids=payload.asset_ids,
+            raw=payload.raw,
+        )
+    except ScanValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post(

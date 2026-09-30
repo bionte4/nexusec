@@ -181,6 +181,35 @@ Daftar semua scan:
 curl -s -H "$AUTH" "$API/api/v1/scans?page=1&page_size=20" | python3 -m json.tool
 ```
 
+## 5.5 Pipeline VA satu klik & import laporan
+
+**Pipeline** (UI Scans → *Start discovery → VA*):
+
+```bash
+curl -s -X POST "$API/api/v1/scans/pipeline" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "X-Organization-Id: $ORG_ID" \
+  -d "{
+    \"name\": \"VA pipeline lab\",
+    \"asset_ids\": [\"$ASSET_ID\"],
+    \"va_engine\": \"nuclei\"
+  }" | python3 -m json.tool
+```
+
+**Import report** (tanpa menjalankan scanner):
+
+```bash
+curl -s -X POST "$API/api/v1/scans/import-report" \
+  -H "$AUTH" -H 'Content-Type: application/json' \
+  -H "X-Organization-Id: $ORG_ID" \
+  -d "{
+    \"name\": \"OpenVAS import\",
+    \"engine\": \"openvas\",
+    \"asset_ids\": [\"$ASSET_ID\"],
+    \"raw\": \"<?xml version=\\\"1.0\\\"?><report>...</report>\"
+  }" | python3 -m json.tool
+```
+
 ### 5.4 Scan Nuclei (VA konten/web)
 
 ```bash

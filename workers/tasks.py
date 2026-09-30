@@ -170,6 +170,66 @@ def _normalize_and_ingest(session: Session, *, scan: Scan, engine: ScannerEngine
     )
 
 
+def _maybe_enqueue_pipeline_next(session: Session, scan: Scan) -> Optional[str]:
+    """If this scan is a pipeline discovery stage, enqueue the follow-up VA scan."""
+    cfg = scan.config or {}
+    next_id = cfg.get("pipeline_next_scan_id")
+    if not next_id:
+        return None
+    try:
+        next_uuid = UUID(str(next_id))
+    except ValueError:
+        logger.warning("Invalid pipeline_next_scan_id on scan %s: %r", scan.id, next_id)
+        return None
+
+    follow = (
+        session.query(Scan)
+        .filter(Scan.id == next_uuid, Scan.organization_id == scan.organization_id)
+        .one_or_none()
+    )
+    if follow is None:
+        logger.warning("Pipeline next scan %s not found", next_id)
+        return None
+    if follow.status not in {ScanStatus.PENDING, ScanStatus.FAILED}:
+        logger.info(
+            "Skipping pipeline next %s (status=%s)", follow.id, follow.status
+        )
+        return None
+
+    engine = follow.engine
+    try:
+        if engine == ScannerEngine.NMAP:
+            async_result = run_nmap_scan.delay(str(follow.id))
+        elif engine == ScannerEngine.NEXUSEC:
+            async_result = run_nexusec_scan.delay(str(follow.id))
+        elif engine == ScannerEngine.NUCLEI:
+            async_result = run_nuclei_scan.delay(str(follow.id))
+        elif engine == ScannerEngine.OPENVAS:
+            async_result = run_openvas_scan.delay(str(follow.id))
+        else:
+            logger.warning("Pipeline next engine unsupported: %s", engine)
+            return None
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to enqueue pipeline next scan %s", follow.id)
+        return None
+
+    follow.status = ScanStatus.QUEUED
+    follow.celery_task_id = async_result.id
+    follow.error_message = None
+    fcfg = dict(follow.config or {})
+    fcfg["pipeline_triggered_by"] = str(scan.id)
+    follow.config = fcfg
+    session.add(follow)
+    session.flush()
+    logger.info(
+        "Pipeline %s: enqueued VA scan %s as task %s",
+        cfg.get("pipeline_id"),
+        follow.id,
+        async_result.id,
+    )
+    return async_result.id
+
+
 def _scanner_python_path() -> None:
     import sys
     from pathlib import Path
@@ -285,13 +345,17 @@ def run_nexusec_scan(self, scan_id: str) -> dict[str, Any]:
             result_payload=payload,
             mark_completed=True,
         )
-        return {
+        next_task = _maybe_enqueue_pipeline_next(session, scan)
+        out = {
             "scan_id": scan_id,
             "status": "completed",
             "targets": targets,
             "stats": report.stats,
             "ingest": payload["ingest"],
         }
+        if next_task:
+            out["pipeline_next_task_id"] = next_task
+        return out
 
 
 @celery_app.task(name="scans.run_nmap", bind=True, max_retries=0)
@@ -436,13 +500,17 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
             result_payload=payload,
             mark_completed=True,
         )
-        return {
+        next_task = _maybe_enqueue_pipeline_next(session, scan)
+        out = {
             "scan_id": scan_id,
             "status": "completed",
             "targets": targets,
             "returncode": 0,
             "ingest": payload["ingest"],
         }
+        if next_task:
+            out["pipeline_next_task_id"] = next_task
+        return out
 
 
 @celery_app.task(name="scans.run_nuclei", bind=True, max_retries=0)
@@ -606,13 +674,17 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
             result_payload=payload,
             mark_completed=True,
         )
-        return {
+        next_task = _maybe_enqueue_pipeline_next(session, scan)
+        out = {
             "scan_id": scan_id,
             "status": "completed",
             "targets": targets,
             "returncode": 0,
             "ingest": payload["ingest"],
         }
+        if next_task:
+            out["pipeline_next_task_id"] = next_task
+        return out
 
 
 @celery_app.task(name="scans.run_openvas", bind=True, max_retries=0)
@@ -760,13 +832,17 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
             result_payload=payload,
             mark_completed=True,
         )
-        return {
+        next_task = _maybe_enqueue_pipeline_next(session, scan)
+        out = {
             "scan_id": scan_id,
             "status": "completed",
             "targets": targets,
             "returncode": 0,
             "ingest": payload["ingest"],
         }
+        if next_task:
+            out["pipeline_next_task_id"] = next_task
+        return out
 
 
 @celery_app.task(name="scans.run_scan", bind=True)
