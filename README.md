@@ -31,7 +31,7 @@ cp .env.example .env
 
 # Full stack (API, Celery worker, isolated scanner-worker, Postgres, Redis, frontend)
 docker compose up -d --build
-# API: http://localhost:8000/docs  ·  SOC UI: http://localhost:8080
+# API: http://localhost:8000/docs  ·  SOC UI: http://localhost:8081
 
 # Or infra only + local API/worker:
 docker compose up -d postgres redis
@@ -50,9 +50,10 @@ API docs: http://localhost:8000/docs
 
 ## Usage guides
 
-- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas), authenticated VA + ROE, normalize, triage, compliance reports
-- **AI integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — Groq/OpenRouter/OpenAI/Ollama keys, remediation + bulk, FP, ChatOps
-- **Scanner connectors (UI cards):** [`docs/scanner-connectors.md`](docs/scanner-connectors.md) — Nmap, Nuclei, NexuSec, OpenVAS presets, unauthenticated catalogs (`webserver` / `dbserver` / `appserver`), worker config, troubleshooting
+- **Deploy VPS (production):** [`docs/deploy-vps.md`](docs/deploy-vps.md) — Ubuntu, Docker Compose, Nginx, DNS, Certbot, domain contoh `nexusec.my.id`
+- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas/zap), authenticated VA + ROE, normalize, triage, compliance reports
+- **AI integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — Admin UI settings form, Groq/OpenRouter/OpenAI/Ollama, remediation + bulk, FP, ChatOps
+- **Scanner connectors (UI cards):** [`docs/scanner-connectors.md`](docs/scanner-connectors.md) — Nmap, Nuclei, NexuSec, OpenVAS, ZAP presets, unauthenticated catalogs (`webserver` / `dbserver` / `appserver`), worker config, troubleshooting
 - **Greenbone live GMP:** [`docs/greenbone-gvm.md`](docs/greenbone-gvm.md) — connect `python-gvm` to an external GVM appliance
 - Data model: [`docs/data-model.md`](docs/data-model.md)
 - Integrations & hardening: [`docs/integrations-hardening.md`](docs/integrations-hardening.md)

@@ -37,3 +37,4 @@ Live `gmp` mode requires `gvm-cli` + a configured appliance; otherwise the worke
 5. Scanner wrappers use argv lists (`shell=False`); never pass raw user strings into shells.
 6. Disable unused AI/ticket/SIEM integrations in production until keys are rotated and scoped.
 7. Prefer mock OpenVAS in shared demos; isolate live GVM credentials to private workers only.
+8. Production VPS: bind API/UI to `127.0.0.1`, terminate TLS at Nginx, open only 22/80/443 — see [`deploy-vps.md`](deploy-vps.md).
