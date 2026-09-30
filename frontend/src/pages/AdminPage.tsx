@@ -619,6 +619,14 @@ export function AdminPage() {
                 loadingLabel={t('admin.loadingPanel', {
                   title: t('admin.platformDeps').toLowerCase(),
                 })}
+                enableAiTest
+                onAiTestNotice={(msg) => setNotice(msg)}
+                onHealthRefresh={() => {
+                  void api
+                    .healthDetailed()
+                    .then((h) => setHealth(h))
+                    .catch(() => undefined)
+                }}
               />
               <SystemStatusPanel
                 title={t('admin.workersTools')}
@@ -815,11 +823,61 @@ function SystemStatusPanel({
   title,
   payload,
   loadingLabel,
+  enableAiTest = false,
+  onAiTestNotice,
+  onHealthRefresh,
 }: {
   title: string
   payload: Record<string, unknown> | null
   loadingLabel: string
+  enableAiTest?: boolean
+  onAiTestNotice?: (msg: string) => void
+  onHealthRefresh?: () => void
 }) {
+  const { t } = useLocale()
+  const [aiTesting, setAiTesting] = useState(false)
+  const [aiSaving, setAiSaving] = useState(false)
+  const [aiForm, setAiForm] = useState({
+    api_key: '',
+    base_url: 'https://api.groq.com/openai/v1',
+    model: 'openai/gpt-oss-20b',
+    api_key_masked: '',
+    source: 'none',
+  })
+  const [aiLoaded, setAiLoaded] = useState(false)
+  const [aiTestResult, setAiTestResult] = useState<{
+    ok: boolean
+    status?: string
+    detail: string
+    latency_ms?: number | null
+    model?: string | null
+    provider_hint?: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    if (!enableAiTest || !payload) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const s = await api.getAiSettings()
+        if (cancelled) return
+        setAiForm({
+          api_key: '',
+          base_url: s.base_url || 'https://api.groq.com/openai/v1',
+          model: s.model || 'openai/gpt-oss-20b',
+          api_key_masked: s.api_key_masked || '',
+          source: s.source || 'none',
+        })
+        setAiLoaded(true)
+      } catch {
+        if (!cancelled) setAiLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [enableAiTest, payload])
+
   if (!payload) {
     return (
       <div className="panel rounded-xl p-5 text-sm text-surface-400">
@@ -831,8 +889,84 @@ function SystemStatusPanel({
   const overall = String(payload.status ?? 'unknown')
   const checks = (payload.checks ?? null) as Record<
     string,
-    { status?: string; latency_ms?: number; detail?: string; meta?: unknown }
+    {
+      status?: string
+      latency_ms?: number
+      detail?: string
+      meta?: Record<string, unknown> | null
+    }
   > | null
+
+  async function runAiTest() {
+    setAiTesting(true)
+    setAiTestResult(null)
+    try {
+      const res = await api.healthAiTest()
+      setAiTestResult(res)
+      if (res.ok) {
+        onAiTestNotice?.(
+          t('admin.aiTestOk', {
+            provider: res.provider_hint ?? 'llm',
+            model: res.model ?? '—',
+            ms: res.latency_ms ?? '—',
+          }),
+        )
+      } else {
+        onAiTestNotice?.(
+          t('admin.aiTestFailed', { detail: res.detail || 'unknown' }),
+        )
+      }
+    } catch (err) {
+      const detail = err instanceof ApiError ? err.message : String(err)
+      setAiTestResult({ ok: false, detail })
+      onAiTestNotice?.(t('admin.aiTestFailed', { detail }))
+    } finally {
+      setAiTesting(false)
+    }
+  }
+
+  async function saveAiSettings(clearKey = false) {
+    setAiSaving(true)
+    try {
+      const payloadBody: {
+        api_key?: string
+        base_url?: string
+        model?: string
+        clear_api_key?: boolean
+      } = {
+        base_url: aiForm.base_url.trim(),
+        model: aiForm.model.trim(),
+      }
+      if (clearKey) payloadBody.clear_api_key = true
+      else if (aiForm.api_key.trim()) payloadBody.api_key = aiForm.api_key.trim()
+
+      const saved = await api.updateAiSettings(payloadBody)
+      setAiForm((f) => ({
+        ...f,
+        api_key: '',
+        api_key_masked: saved.api_key_masked,
+        base_url: saved.base_url,
+        model: saved.model,
+        source: saved.source,
+      }))
+      onAiTestNotice?.(t('admin.aiSaved', { source: saved.source }))
+      onHealthRefresh?.()
+    } catch (err) {
+      onAiTestNotice?.(
+        err instanceof ApiError ? err.message : t('admin.aiSaveFailed'),
+      )
+    } finally {
+      setAiSaving(false)
+    }
+  }
+
+  function applyGroqDefaults() {
+    setAiForm((f) => ({
+      ...f,
+      base_url: 'https://api.groq.com/openai/v1',
+      model: 'openai/gpt-oss-20b',
+    }))
+  }
 
   return (
     <div className="panel rounded-xl p-5">
@@ -847,31 +981,143 @@ function SystemStatusPanel({
 
       {checks && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {Object.entries(checks).map(([name, info]) => (
-            <div
-              key={name}
-              className="rounded-lg border border-surface-700 bg-surface-900/60 px-3 py-3"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm capitalize text-surface-100">
-                  {name}
-                </span>
-                <span
-                  className={`font-mono text-[11px] uppercase ${statusColor(info.status)}`}
-                >
-                  {info.status ?? '—'}
-                </span>
-              </div>
-              {info.latency_ms != null && (
-                <div className="mt-1 font-mono text-[11px] text-surface-400">
-                  {info.latency_ms} ms
+          {Object.entries(checks).map(([name, info]) => {
+            const isAi = name.toLowerCase() === 'ai'
+            return (
+              <div
+                key={name}
+                className={`rounded-lg border border-surface-700 bg-surface-900/60 px-3 py-3 ${
+                  isAi ? 'sm:col-span-2 border-accent/30' : ''
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm capitalize text-surface-100">
+                    {name}
+                  </span>
+                  <span
+                    className={`font-mono text-[11px] uppercase ${statusColor(
+                      aiTestResult && isAi
+                        ? aiTestResult.ok
+                          ? 'ok'
+                          : aiTestResult.status || 'unavailable'
+                        : info.status,
+                    )}`}
+                  >
+                    {aiTestResult && isAi
+                      ? aiTestResult.ok
+                        ? 'ok'
+                        : aiTestResult.status || 'fail'
+                      : (info.status ?? '—')}
+                  </span>
                 </div>
-              )}
-              {info.detail && (
-                <div className="mt-1 text-xs text-surface-400">{info.detail}</div>
-              )}
-            </div>
-          ))}
+                {info.latency_ms != null && !isAi && (
+                  <div className="mt-1 font-mono text-[11px] text-surface-400">
+                    {info.latency_ms} ms
+                  </div>
+                )}
+                {isAi && aiTestResult?.latency_ms != null && (
+                  <div className="mt-1 font-mono text-[11px] text-surface-400">
+                    {aiTestResult.latency_ms} ms
+                  </div>
+                )}
+                <div className="mt-1 text-xs text-surface-400">
+                  {isAi && aiTestResult
+                    ? aiTestResult.detail
+                    : (info.detail ?? '')}
+                </div>
+
+                {isAi && enableAiTest ? (
+                  <div className="mt-3 space-y-2 border-t border-surface-700 pt-3">
+                    <p className="text-[11px] leading-relaxed text-surface-500">
+                      {t('admin.aiSetupHint')}
+                    </p>
+                    {aiLoaded ? (
+                      <p className="font-mono text-[10px] text-surface-500">
+                        {t('admin.aiSource', { source: aiForm.source })}
+                        {aiForm.api_key_masked
+                          ? ` · ${aiForm.api_key_masked}`
+                          : ''}
+                      </p>
+                    ) : null}
+                    <label className="block space-y-1">
+                      <span className="text-[11px] text-surface-400">
+                        {t('admin.aiApiKey')}
+                      </span>
+                      <input
+                        type="password"
+                        autoComplete="off"
+                        value={aiForm.api_key}
+                        onChange={(e) =>
+                          setAiForm((f) => ({ ...f, api_key: e.target.value }))
+                        }
+                        placeholder={t('admin.aiApiKeyPlaceholder')}
+                        className="w-full rounded-md border border-surface-600 bg-surface-950 px-3 py-2 text-sm outline-none focus:border-accent"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[11px] text-surface-400">
+                        {t('admin.aiBaseUrl')}
+                      </span>
+                      <input
+                        value={aiForm.base_url}
+                        onChange={(e) =>
+                          setAiForm((f) => ({ ...f, base_url: e.target.value }))
+                        }
+                        className="w-full rounded-md border border-surface-600 bg-surface-950 px-3 py-2 font-mono text-xs outline-none focus:border-accent"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-[11px] text-surface-400">
+                        {t('admin.aiModel')}
+                      </span>
+                      <input
+                        value={aiForm.model}
+                        onChange={(e) =>
+                          setAiForm((f) => ({ ...f, model: e.target.value }))
+                        }
+                        className="w-full rounded-md border border-surface-600 bg-surface-950 px-3 py-2 font-mono text-xs outline-none focus:border-accent"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => applyGroqDefaults()}
+                        className="rounded-md border border-surface-600 px-2 py-1.5 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                      >
+                        {t('admin.aiApplyGroq')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={aiSaving}
+                        onClick={() => void saveAiSettings(true)}
+                        className="rounded-md border border-surface-600 px-2 py-1.5 text-[11px] text-surface-300 hover:border-danger hover:text-danger disabled:opacity-50"
+                      >
+                        {t('admin.aiClearKey')}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={aiSaving}
+                      onClick={() => void saveAiSettings(false)}
+                      className="w-full rounded-md bg-accent px-3 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
+                    >
+                      {aiSaving ? t('admin.aiSaving') : t('admin.aiSave')}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={aiTesting}
+                      onClick={() => void runAiTest()}
+                      className="w-full rounded-md border border-accent/40 px-3 py-2 text-sm font-medium text-accent transition hover:bg-accent/10 disabled:opacity-50"
+                    >
+                      {aiTesting
+                        ? t('admin.aiTesting')
+                        : t('admin.aiTestConnection')}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -883,7 +1129,6 @@ function SystemStatusPanel({
     </div>
   )
 }
-
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="panel rounded-xl p-4">

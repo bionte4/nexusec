@@ -22,6 +22,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await refresh_scan_gauges()
     except Exception:
         pass
+    # Load platform AI LLM settings from DB into process cache
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.services.ai_settings_service import load_ai_settings
+
+        async with AsyncSessionLocal() as session:
+            await load_ai_settings(session)
+    except Exception:
+        pass
     yield
 
 

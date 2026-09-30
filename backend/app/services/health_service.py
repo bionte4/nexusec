@@ -240,20 +240,32 @@ class HealthService:
 
     async def check_ai(self) -> CheckResult:
         """Report LLM key / provider readiness without exposing secrets."""
+        from app.services.ai_settings_service import (
+            public_ai_settings_view,
+            resolve_effective_ai_credentials,
+        )
+
+        # Prefer fresh DB row when session available (multi-worker safe)
+        if getattr(self, "_ai_db", None) is not None:
+            try:
+                from app.services.ai_settings_service import load_ai_settings
+
+                await load_ai_settings(self._ai_db)
+            except Exception:
+                pass
+
         s = self.settings
-        ai_key = bool((s.ai_api_key or "").strip())
-        openai_key = bool((s.openai_api_key or "").strip())
+        api_key, base, model = resolve_effective_ai_credentials(s)
+        view = public_ai_settings_view(settings=s)
         anthropic_key = bool((s.anthropic_api_key or "").strip())
-        any_key = ai_key or openai_key or anthropic_key
-        base = (s.ai_base_url or s.openai_api_base or "").strip()
-        model = (s.ai_model or s.openai_model or "").strip()
+        any_key = bool(api_key) or anthropic_key
         fallback = bool(s.ai_remediation_fallback_mock)
         if any_key:
             status = "ok"
-            detail = "LLM credentials configured"
+            detail = f"LLM credentials configured via {view['source']} (use Test connection to verify)"
         elif fallback:
             status = "degraded"
-            detail = "No LLM API key — mock remediation / FP / chat fallback active"
+            detail = "No LLM API key — save key on this card (or set AI_API_KEY in .env)"
         else:
             status = "unavailable"
             detail = "No LLM API key and mock fallback disabled"
@@ -262,19 +274,120 @@ class HealthService:
             status=status,
             detail=detail,
             meta={
-                "ai_api_key_set": ai_key,
-                "openai_api_key_set": openai_key,
+                "ai_api_key_set": view["api_key_set"],
+                "openai_api_key_set": bool((s.openai_api_key or "").strip()),
                 "anthropic_api_key_set": anthropic_key,
                 "ai_base_url": base or None,
                 "ai_model": model or None,
+                "source": view["source"],
                 "remediation_enabled": bool(s.ai_remediation_enabled),
                 "remediation_fallback_mock": fallback,
                 "fp_enabled": bool(s.ai_fp_enabled),
                 "soc_chat_enabled": bool(s.ai_soc_chat_enabled),
+                "recommended_provider": "groq",
+                "setup_hint": (
+                    "Save API key + Base URL https://api.groq.com/openai/v1 on this card"
+                ),
             },
         )
 
+    async def test_ai_connection(self, db: Optional[AsyncSession] = None) -> dict[str, Any]:
+        """Live ping to the configured OpenAI-compatible LLM (no secrets returned)."""
+        from app.services.ai_remediation import (
+            AIRemediationError,
+            build_async_openai_client,
+            resolve_ai_credentials,
+        )
+        from app.services.ai_settings_service import load_ai_settings, normalize_base_url
+
+        if db is not None:
+            try:
+                await load_ai_settings(db)
+            except Exception as exc:
+                logger.warning("Could not reload AI settings before test: %s", exc)
+
+        started = time.perf_counter()
+        api_key, base_url, model = resolve_ai_credentials(self.settings)
+        base_url = normalize_base_url(base_url)
+        if not api_key:
+            return {
+                "ok": False,
+                "status": "unavailable",
+                "detail": "No LLM API key — paste key on this card and click Save settings",
+                "latency_ms": None,
+                "base_url": base_url or None,
+                "model": model or None,
+                "provider_hint": _provider_hint(base_url),
+            }
+
+        # Guard against console URL still somehow present
+        if "console.groq.com" in (base_url or "").lower():
+            return {
+                "ok": False,
+                "status": "degraded",
+                "detail": (
+                    "Base URL salah — jangan pakai console.groq.com/keys. "
+                    "Pakai https://api.groq.com/openai/v1 (klik Pakai default Groq)"
+                ),
+                "latency_ms": None,
+                "base_url": base_url,
+                "model": model,
+                "provider_hint": "groq",
+            }
+
+        try:
+            client = build_async_openai_client(self.settings)
+            resp = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Reply with exactly: OK",
+                    }
+                ],
+                max_tokens=8,
+                temperature=0,
+            )
+            latency = (time.perf_counter() - started) * 1000
+            content = ""
+            if resp.choices:
+                content = (resp.choices[0].message.content or "").strip()
+            preview = content[:40] if content else "(empty)"
+            return {
+                "ok": True,
+                "status": "ok",
+                "detail": f"LLM reachable — model replied: {preview!r}",
+                "latency_ms": round(latency, 2),
+                "base_url": base_url,
+                "model": model,
+                "provider_hint": _provider_hint(base_url),
+            }
+        except AIRemediationError as exc:
+            latency = (time.perf_counter() - started) * 1000
+            return {
+                "ok": False,
+                "status": "unavailable" if getattr(exc, "status_code", 500) >= 500 else "degraded",
+                "detail": str(exc),
+                "latency_ms": round(latency, 2),
+                "base_url": base_url,
+                "model": model,
+                "provider_hint": _provider_hint(base_url),
+            }
+        except Exception as exc:
+            latency = (time.perf_counter() - started) * 1000
+            logger.warning("AI connection test failed: %s", exc)
+            return {
+                "ok": False,
+                "status": "unavailable",
+                "detail": f"{exc.__class__.__name__}: {exc}",
+                "latency_ms": round(latency, 2),
+                "base_url": base_url,
+                "model": model,
+                "provider_hint": _provider_hint(base_url),
+            }
+
     async def detailed(self, db: Optional[AsyncSession] = None) -> dict[str, Any]:
+        self._ai_db = db
         postgres, redis_check, celery, docker, ai = await asyncio.gather(
             self.check_postgres(db),
             self.check_redis(),
@@ -289,6 +402,19 @@ class HealthService:
             "checked_at": datetime.now(timezone.utc).isoformat(),
             "checks": {c.name: c.to_dict() for c in checks},
         }
+
+
+def _provider_hint(base_url: str) -> str:
+    u = (base_url or "").lower()
+    if "groq.com" in u:
+        return "groq"
+    if "openrouter.ai" in u:
+        return "openrouter"
+    if "openai.com" in u:
+        return "openai"
+    if "11434" in u or "ollama" in u:
+        return "ollama"
+    return "openai-compatible"
 
 
 class WorkerMonitorService:

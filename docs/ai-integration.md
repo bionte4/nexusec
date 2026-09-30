@@ -21,9 +21,34 @@ curl -s -H "$AUTH" "$API/api/v1/health/detailed" | python3 -c \
   'import sys,json; d=json.load(sys.stdin); print(json.dumps(d["checks"].get("ai"), indent=2))'
 ```
 
-Field penting: `ai_api_key_set`, `openai_api_key_set`, `ai_base_url`, `ai_model`, `remediation_fallback_mock`. Nilai key **tidak** pernah dikembalikan.
+Field penting: `api_key_set`, `source` (`database` | `env` | `none`), `ai_base_url`, `ai_model`. Nilai key **tidak** pernah dikembalikan.
 
-## 2. Variabel `.env`
+## 2. Konfigurasi dari UI (disarankan)
+
+Admin → **Sistem** → kartu **Ai**:
+
+1. (Opsional) **Pakai default Groq**
+2. Isi **API key** (`gsk_…` dari console.groq.com)
+3. **Simpan pengaturan** — tersimpan di Postgres (`platform_settings`), tanpa edit `.env`
+4. **Uji koneksi**
+
+API:
+
+```bash
+# Baca (key di-mask)
+GET /api/v1/health/ai/settings
+
+# Simpan
+PATCH /api/v1/health/ai/settings
+{ "api_key": "gsk_...", "base_url": "https://api.groq.com/openai/v1", "model": "openai/gpt-oss-20b" }
+
+# Uji
+POST /api/v1/health/ai/test
+```
+
+Prioritas kredensial: **DB/UI → env `.env` → mock fallback**.
+
+## 3. Variabel `.env` (opsional / fallback)
 
 ```bash
 # Master switch
@@ -31,35 +56,40 @@ AI_REMEDIATION_ENABLED=true
 AI_REMEDIATION_FALLBACK_MOCK=true
 AI_REMEDIATION_TIMEOUT_SECONDS=60
 
-# OpenAI-compatible ( Groq / OpenRouter / OpenAI / lokal )
-AI_API_KEY=gsk_xxxxxxxx
+# Hanya dipakai jika belum ada setting di UI/DB
+AI_API_KEY=
 AI_BASE_URL=https://api.groq.com/openai/v1
-AI_MODEL=llama-3.3-70b-versatile
-
-# Opsional: paksa JSON mode (OpenAI-style)
-# AI_FORCE_JSON_RESPONSE=true
-
-# Legacy aliases (masih dibaca jika AI_* kosong)
-# OPENAI_API_KEY=
-# OPENAI_API_BASE=https://api.openai.com/v1
-# OPENAI_MODEL=gpt-4o-mini
+AI_MODEL=openai/gpt-oss-20b
 ```
 
-Setelah mengubah `.env`, recreate container API (dan worker bila dipakai untuk AI di background):
+## 3. Provider contoh (rekomendasi)
+
+| Prioritas | Provider | Cocok untuk | Catatan |
+|-----------|----------|-------------|---------|
+| **1 (lab)** | **Groq** | Demo / CI / latency rendah | Free tier; contoh model `openai/gpt-oss-20b` / `openai/gpt-oss-120b` |
+| 2 | OpenRouter | Multi-model satu key | Bayar per token; mudah ganti model |
+| 3 | OpenAI | Produksi / kualitas stabil | Perlu billing; set `AI_FORCE_JSON_RESPONSE=true` |
+| 4 | Ollama (lokal) | Offline / data tidak keluar | `host.docker.internal:11434` dari container |
+
+### Groq (direkomendasikan untuk mulai)
+
+1. Buat akun di https://console.groq.com → **API Keys** → create key (`gsk_…`).
+2. Edit `.env` (jangan commit):
+
+```bash
+AI_API_KEY=gsk_...
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_MODEL=openai/gpt-oss-20b
+AI_REMEDIATION_FALLBACK_MOCK=true
+```
+
+3. Recreate API:
 
 ```bash
 docker compose up -d --force-recreate api
 ```
 
-## 3. Provider contoh
-
-### Groq (cepat, gratis terbatas)
-
-```bash
-AI_API_KEY=gsk_...
-AI_BASE_URL=https://api.groq.com/openai/v1
-AI_MODEL=llama-3.3-70b-versatile
-```
+4. Admin → **System** → kartu **Ai** → **Test connection** (atau `POST /api/v1/health/ai/test`).
 
 ### OpenRouter
 
@@ -86,7 +116,15 @@ AI_BASE_URL=http://host.docker.internal:11434/v1
 AI_MODEL=llama3.2
 ```
 
-## 4. Uji cepat
+## 4. Uji cepat / Test connection
+
+**Dari UI (Admin):** System → kartu Ai → **Test connection**. Endpoint memanggil chat completion mini dan menampilkan latency + model tanpa mengekspos API key.
+
+```bash
+curl -s -X POST -H "$AUTH" "$API/api/v1/health/ai/test" | python3 -m json.tool
+```
+
+Uji fitur remediation:
 
 ```bash
 export AUTH="Authorization: Bearer $TOKEN"

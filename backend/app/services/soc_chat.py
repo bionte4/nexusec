@@ -215,14 +215,17 @@ class SocChatService:
         return (self.settings.ai_soc_chat_provider or "auto").lower().strip()
 
     def resolve_provider(self) -> str:
+        from app.services.ai_settings_service import resolve_effective_ai_credentials
+
         chosen = self.provider
+        api_key, _, _ = resolve_effective_ai_credentials(self.settings)
         if chosen in {"openai", "anthropic", "mock"}:
-            if chosen == "openai" and not self.settings.openai_api_key:
+            if chosen == "openai" and not api_key:
                 raise SocChatError("OPENAI_API_KEY is not configured", status_code=400)
             if chosen == "anthropic" and not self.settings.anthropic_api_key:
                 raise SocChatError("ANTHROPIC_API_KEY is not configured", status_code=400)
             return chosen
-        if self.settings.openai_api_key:
+        if api_key:
             return "openai"
         if self.settings.anthropic_api_key:
             return "anthropic"
@@ -604,10 +607,12 @@ class SocChatService:
             )
 
     async def _call_openai(self, query: str, rag: RAGContext) -> tuple[str, str]:
-        model = self.settings.openai_model
-        url = self.settings.openai_api_base.rstrip("/") + "/chat/completions"
+        from app.services.ai_settings_service import resolve_effective_ai_credentials
+
+        api_key, base_url, model = resolve_effective_ai_credentials(self.settings)
+        url = base_url.rstrip("/") + "/chat/completions"
         headers = {
-            "Authorization": f"Bearer {self.settings.openai_api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
         user_content = (

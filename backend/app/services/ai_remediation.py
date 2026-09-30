@@ -136,13 +136,10 @@ def format_remediation_markdown(result: dict[str, str], *, provider: str, model:
 
 
 def resolve_ai_credentials(settings: Settings) -> tuple[str, str, str]:
-    """Return (api_key, base_url, model) preferring AI_* then OPENAI_* envs."""
-    api_key = (settings.ai_api_key or settings.openai_api_key or "").strip()
-    base_url = (settings.ai_base_url or settings.openai_api_base or "").strip()
-    if not base_url:
-        base_url = "https://api.openai.com/v1"
-    model = (settings.ai_model or settings.openai_model or "gpt-4o-mini").strip()
-    return api_key, base_url.rstrip("/"), model
+    """Return (api_key, base_url, model) preferring DB/UI settings then AI_* / OPENAI_* envs."""
+    from app.services.ai_settings_service import resolve_effective_ai_credentials
+
+    return resolve_effective_ai_credentials(settings)
 
 
 def build_openai_client(settings: Optional[Settings] = None) -> OpenAI:

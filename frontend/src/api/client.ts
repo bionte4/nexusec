@@ -258,6 +258,61 @@ export const api = {
     return request<Record<string, unknown>>('/api/v1/health/workers', {}, [503])
   },
 
+  healthAiTest() {
+    return request<{
+      ok: boolean
+      status: string
+      detail: string
+      latency_ms?: number | null
+      base_url?: string | null
+      model?: string | null
+      provider_hint?: string | null
+    }>('/api/v1/health/ai/test', { method: 'POST' })
+  },
+
+  getAiSettings() {
+    return request<{
+      api_key_set: boolean
+      api_key_masked: string
+      base_url: string
+      model: string
+      enabled: boolean
+      source: string
+      env_fallback_available: boolean
+      recommended: {
+        provider: string
+        base_url: string
+        model: string
+      }
+    }>('/api/v1/health/ai/settings')
+  },
+
+  updateAiSettings(payload: {
+    api_key?: string
+    base_url?: string
+    model?: string
+    enabled?: boolean
+    clear_api_key?: boolean
+  }) {
+    return request<{
+      api_key_set: boolean
+      api_key_masked: string
+      base_url: string
+      model: string
+      enabled: boolean
+      source: string
+      env_fallback_available: boolean
+      recommended: {
+        provider: string
+        base_url: string
+        model: string
+      }
+    }>('/api/v1/health/ai/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
   listAssets(params: {
     page?: number
     page_size?: number

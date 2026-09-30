@@ -3,6 +3,7 @@
 from app.models.asset import Asset
 from app.models.audit_log import AuditLog
 from app.models.organization import Organization
+from app.models.platform_setting import PlatformSetting
 from app.models.scan import Scan, ScanAsset
 from app.models.scan_schedule import ScanSchedule, ScanScheduleAsset
 from app.models.threat_intel import ThreatIntelCve, ThreatIntelSyncRun
@@ -14,6 +15,7 @@ __all__ = [
     "Asset",
     "AuditLog",
     "Organization",
+    "PlatformSetting",
     "Scan",
     "ScanAsset",
     "ScanSchedule",

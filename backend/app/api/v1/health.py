@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, Field
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import RequireAdmin
+from app.services.ai_settings_service import (
+    load_ai_settings,
+    public_ai_settings_view,
+    save_ai_settings,
+)
 from app.services.health_service import HealthService, WorkerMonitorService
 
 router = APIRouter(tags=["health"])
@@ -20,6 +28,17 @@ def get_health_service() -> HealthService:
 
 def get_worker_monitor() -> WorkerMonitorService:
     return WorkerMonitorService()
+
+
+class AISettingsUpdate(BaseModel):
+    api_key: Optional[str] = Field(
+        default=None,
+        description="LLM API key (leave blank or masked to keep existing)",
+    )
+    base_url: Optional[str] = Field(default=None, description="OpenAI-compatible base URL")
+    model: Optional[str] = Field(default=None, description="Model id")
+    enabled: Optional[bool] = None
+    clear_api_key: bool = False
 
 
 @router.get("/health", summary="Liveness probe")
@@ -65,6 +84,53 @@ async def health_detailed(
     if core_bad:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return payload
+
+
+@router.post(
+    "/health/ai/test",
+    summary="Test LLM API connection (Admin) — live ping, no secrets returned",
+)
+async def health_ai_test(
+    _: RequireAdmin,
+    db: AsyncSession = Depends(get_db),
+    service: HealthService = Depends(get_health_service),
+) -> dict[str, Any]:
+    return await service.test_ai_connection(db)
+
+
+@router.get(
+    "/health/ai/settings",
+    summary="Get platform AI LLM settings (Admin, api_key masked)",
+)
+async def get_ai_settings(
+    _: RequireAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    stored = await load_ai_settings(db)
+    return public_ai_settings_view(stored)
+
+
+@router.patch(
+    "/health/ai/settings",
+    summary="Save platform AI LLM settings (Admin) — persists in DB, no .env edit",
+)
+async def patch_ai_settings(
+    payload: AISettingsUpdate,
+    _: RequireAdmin,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    data = payload.model_dump(exclude_unset=True)
+    clear = bool(data.pop("clear_api_key", False))
+    stored = await save_ai_settings(
+        db,
+        api_key=data.get("api_key"),
+        base_url=data.get("base_url"),
+        model=data.get("model"),
+        enabled=data.get("enabled"),
+        clear_api_key=clear,
+    )
+    await db.commit()
+    return public_ai_settings_view(stored)
 
 
 @router.get(
