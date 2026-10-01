@@ -132,6 +132,7 @@ const en = {
     presetDiscovery: 'Discovery · nmap',
     presetOsint: 'OSINT · dns/CT/RDAP',
     presetNuclei: 'VA · nuclei',
+    presetNucleiBroad: 'VA · nuclei broad',
     presetNucleiAuth: 'VA · nuclei auth',
     presetNexusec: 'VA · nexusec',
     presetOpenvas: 'VA · openvas',
@@ -139,10 +140,18 @@ const en = {
     presetDiscoveryName: 'Discovery (nmap)',
     presetOsintName: 'OSINT (dns · crt.sh · RDAP)',
     presetNucleiName: 'VA (nuclei)',
+    presetNucleiBroadName: 'VA (nuclei · broad)',
     presetNucleiAuthName: 'VA (nuclei · authenticated)',
     presetNexusecName: 'VA (nexusec)',
     presetOpenvasName: 'VA (openvas)',
     presetZapName: 'DAST (OWASP ZAP)',
+    presetNucleiBroadTitle:
+      'No template tags — packs http+ssl+network, severity through low. Use when default VA returns 0 findings.',
+    nucleiTags: 'Nuclei tags',
+    nucleiTagsPlaceholder: 'cve,misconfig,vuln (empty = all tags)',
+    nucleiTagsHint:
+      'Comma-separated Nuclei -tags. Leave empty for broad coverage (no -tags filter).',
+    nucleiSeverity: 'Severity filter',
     osintHint:
       'Passive OSINT only (DNS + Certificate Transparency + RDAP). Requires a domain asset and RoE. No Amass/subfinder binary needed.',
     presetMockLabTitle:
@@ -629,6 +638,7 @@ const id: Messages = {
     presetDiscovery: 'Discovery · nmap',
     presetOsint: 'OSINT · dns/CT/RDAP',
     presetNuclei: 'VA · nuclei',
+    presetNucleiBroad: 'VA · nuclei broad',
     presetNucleiAuth: 'VA · nuclei auth',
     presetNexusec: 'VA · nexusec',
     presetOpenvas: 'VA · openvas',
@@ -636,10 +646,18 @@ const id: Messages = {
     presetDiscoveryName: 'Discovery (nmap)',
     presetOsintName: 'OSINT (dns · crt.sh · RDAP)',
     presetNucleiName: 'VA (nuclei)',
+    presetNucleiBroadName: 'VA (nuclei · broad)',
     presetNucleiAuthName: 'VA (nuclei · terautentikasi)',
     presetNexusecName: 'VA (nexusec)',
     presetOpenvasName: 'VA (openvas)',
     presetZapName: 'DAST (OWASP ZAP)',
+    presetNucleiBroadTitle:
+      'Tanpa filter tags — pack http+ssl+network, severity sampai low. Pakai jika VA default 0 finding.',
+    nucleiTags: 'Tags Nuclei',
+    nucleiTagsPlaceholder: 'cve,misconfig,vuln (kosong = semua tags)',
+    nucleiTagsHint:
+      'Tags Nuclei dipisah koma (-tags). Kosongkan untuk cakupan luas (tanpa filter -tags).',
+    nucleiSeverity: 'Filter severity',
     osintHint:
       'OSINT pasif saja (DNS + Certificate Transparency + RDAP). Butuh aset domain + RoE. Tidak perlu binary Amass/subfinder.',
     presetMockLabTitle:

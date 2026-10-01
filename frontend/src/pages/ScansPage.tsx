@@ -145,10 +145,24 @@ export function ScansPage() {
     | 'discovery_nmap'
     | 'discovery_osint'
     | 'va_nuclei'
+    | 'va_nuclei_broad'
     | 'va_nuclei_auth'
     | 'va_nexusec'
     | 'va_openvas'
     | 'va_zap'
+
+  function sanitizeScanConfig(
+    config: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const next = { ...config }
+    if (Array.isArray(next.tags) && next.tags.length === 0) {
+      delete next.tags
+    }
+    if (Array.isArray(next.severity) && next.severity.length === 0) {
+      delete next.severity
+    }
+    return next
+  }
 
   function applyPreset(preset: PresetId) {
     if (preset === 'discovery_nmap') {
@@ -193,6 +207,27 @@ export function ScansPage() {
         config: {
           severity: ['critical', 'high', 'medium'],
           tags: ['cve', 'misconfig', 'vuln', 'exposure'],
+          exclude_tags: ['dos'],
+          rate_limit: 25,
+          concurrency: 10,
+          bulk_size: 10,
+          template_dirs: [
+            '/opt/nuclei-templates/http',
+            '/opt/nuclei-templates/ssl',
+            '/opt/nuclei-templates/network',
+          ],
+        },
+      }))
+      return
+    }
+    if (preset === 'va_nuclei_broad') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetNucleiBroadName'),
+        scan_type: 'va',
+        engine: 'nuclei',
+        config: {
+          severity: ['critical', 'high', 'medium', 'low'],
           exclude_tags: ['dos'],
           rate_limit: 25,
           concurrency: 10,
@@ -292,6 +327,27 @@ export function ScansPage() {
         config: {
           severity: ['critical', 'high', 'medium'],
           tags: ['cve', 'misconfig', 'vuln', 'exposure'],
+          exclude_tags: ['dos'],
+          rate_limit: 25,
+          concurrency: 10,
+          bulk_size: 10,
+          template_dirs: [
+            '/opt/nuclei-templates/http',
+            '/opt/nuclei-templates/ssl',
+            '/opt/nuclei-templates/network',
+          ],
+        },
+      }))
+      return
+    }
+    if (preset === 'va_nuclei_broad') {
+      setScheduleForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetNucleiBroadName'),
+        scan_type: 'va',
+        engine: 'nuclei',
+        config: {
+          severity: ['critical', 'high', 'medium', 'low'],
           exclude_tags: ['dos'],
           rate_limit: 25,
           concurrency: 10,
@@ -437,7 +493,7 @@ export function ScansPage() {
         scan_type: form.scan_type,
         engine: form.engine,
         asset_ids: [form.asset_id],
-        config: form.config,
+        config: sanitizeScanConfig(form.config),
         start_immediately: form.start_immediately,
       })
       setNotice(res.message)
@@ -520,7 +576,7 @@ export function ScansPage() {
         scan_type: scheduleForm.scan_type,
         engine: scheduleForm.engine,
         asset_ids: [scheduleForm.asset_id],
-        config: scheduleForm.config,
+        config: sanitizeScanConfig(scheduleForm.config),
         interval_minutes: scheduleForm.interval_minutes,
         enabled: scheduleForm.enabled,
         run_immediately: scheduleForm.run_immediately,
@@ -751,6 +807,14 @@ export function ScansPage() {
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
               >
                 {t('scans.presetNuclei')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('va_nuclei_broad')}
+                title={t('scans.presetNucleiBroadTitle')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetNucleiBroad')}
               </button>
               <button
                 type="button"
@@ -1031,6 +1095,83 @@ export function ScansPage() {
                     <option value="full">full</option>
                     <option value="owasp_top10">owasp_top10 (offline suite)</option>
                   </select>
+                </div>
+              </div>
+            ) : null}
+            {form.engine === 'nuclei' ? (
+              <div className="space-y-2 rounded-lg border border-surface-700 p-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-surface-400">
+                    {t('scans.nucleiTags')}
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      Array.isArray(form.config.tags)
+                        ? (form.config.tags as string[]).join(',')
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const parsed = e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                      setForm({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          tags: parsed,
+                        },
+                      })
+                    }}
+                    placeholder={t('scans.nucleiTagsPlaceholder')}
+                    className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                  />
+                  <p className="text-[10px] text-surface-500">
+                    {t('scans.nucleiTagsHint')}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[11px] text-surface-400">
+                    {t('scans.nucleiSeverity')}
+                  </span>
+                  <div className="flex flex-wrap gap-3 text-xs text-surface-300">
+                    {(
+                      [
+                        'critical',
+                        'high',
+                        'medium',
+                        'low',
+                        'info',
+                      ] as const
+                    ).map((sev) => {
+                      const selected = Array.isArray(form.config.severity)
+                        ? (form.config.severity as string[])
+                        : []
+                      const checked = selected.includes(sev)
+                      return (
+                        <label key={sev} className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? selected.filter((s) => s !== sev)
+                                : [...selected, sev]
+                              setForm({
+                                ...form,
+                                config: {
+                                  ...form.config,
+                                  severity: next,
+                                },
+                              })
+                            }}
+                          />
+                          {sev}
+                        </label>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -1581,6 +1722,14 @@ export function ScansPage() {
                   className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
                 >
                   {t('scans.presetNuclei')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySchedulePreset('va_nuclei_broad')}
+                  title={t('scans.presetNucleiBroadTitle')}
+                  className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                >
+                  {t('scans.presetNucleiBroad')}
                 </button>
                 <button
                   type="button"

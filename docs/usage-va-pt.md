@@ -138,7 +138,7 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 |--------|-------------------|------------|
 | `nmap` | `discovery` / `va` | Port/service fingerprint + NSE unauthenticated; `port_preset` `common_va` / `webserver` / `dbserver` / `appserver` |
 | `osint` | `discovery` | Passivecon pasif: DNS + Certificate Transparency (crt.sh) + RDAP — lihat [`osint-connector.md`](osint-connector.md) |
-| `nuclei` | `va` / `pt` | Template-driven VA; default packs `http`+`ssl`+`network` (tanpa kredensial) |
+| `nuclei` | `va` / `pt` | Template-driven VA; default packs `http`+`ssl`+`network` (tanpa kredensial). Preset **VA · nuclei broad** = tanpa `-tags`, severity sampai `low`. Field **Tags** di form bisa dikosongkan. |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
 | `openvas` | `va` | Greenbone/OpenVAS — default **GMP** / `report_xml`; mock + `lab_mode` untuk lab saja |
 | `zap` | `va` | OWASP ZAP DAST — default **import** `report_json`; mock + `lab_mode` untuk lab |
