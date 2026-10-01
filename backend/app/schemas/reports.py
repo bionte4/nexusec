@@ -72,3 +72,57 @@ class ComplianceReport(BaseModel):
     control_mapping: list[ControlBucket]
     findings: list[ReportFindingRow]
     recommendations: list[str] = Field(default_factory=list)
+
+
+class EngagementScanInfo(BaseModel):
+    scan_id: uuid.UUID
+    name: str
+    scan_type: str
+    engine: str
+    status: str
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    asset_names: list[str] = Field(default_factory=list)
+    roe_notes: Optional[str] = None
+
+
+class EngagementFindingRow(BaseModel):
+    vulnerability_id: uuid.UUID
+    title: str
+    severity: Severity
+    status: FindingStatus
+    asset_id: uuid.UUID
+    asset_name: str
+    cve_id: Optional[str] = None
+    cwe_id: Optional[str] = None
+    cvss_score: Optional[float] = None
+    source_tool: Optional[str] = None
+    port: Optional[int] = None
+    remediation_excerpt: Optional[str] = None
+    remediation_owner_label: Optional[str] = None
+    last_retest_scan_id: Optional[uuid.UUID] = None
+    first_seen_at: datetime
+    last_seen_at: datetime
+
+
+class EngagementReport(BaseModel):
+    """VA/PT engagement report (client-facing, PDF-ready)."""
+
+    metadata: ReportMetadata
+    engagement_type: str  # va | pt | mixed | custom
+    executive_summary: str
+    scope: ReportSection
+    methodology: ReportSection
+    severity_summary: dict[str, int] = Field(default_factory=dict)
+    status_summary: dict[str, int] = Field(default_factory=dict)
+    scans: list[EngagementScanInfo] = Field(default_factory=list)
+    top_findings: list[EngagementFindingRow] = Field(default_factory=list)
+    findings: list[EngagementFindingRow] = Field(default_factory=list)
+    remediation_highlights: list[str] = Field(default_factory=list)
+    retest_summary: ReportSection
+    recommendations: list[str] = Field(default_factory=list)
+    disclaimer: str = (
+        "This report is generated from NexuSec orchestration data. "
+        "Human review is required before client delivery. "
+        "Only authorized targets under a written Rules of Engagement (RoE) may be assessed."
+    )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { CalendarClock, Play, Plus, Radar, RefreshCw, Trash2 } from 'lucide-react'
+import { CalendarClock, FileDown, Play, Plus, Radar, RefreshCw, Trash2 } from 'lucide-react'
 import {
   api,
   ApiError,
@@ -562,6 +562,33 @@ export function ScansPage() {
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('scans.startFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function onDownloadEngagement(scan: Scan) {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (usingMock || token === 'demo') {
+        setError(t('scans.engagementLiveRequired'))
+        return
+      }
+      const engagementType =
+        scan.scan_type === 'va' || scan.scan_type === 'pt'
+          ? scan.scan_type
+          : undefined
+      await api.downloadEngagementPdf({
+        scan_id: scan.id,
+        engagement_type: engagementType,
+      })
+      setNotice(t('scans.engagementPdfExported', { name: scan.name }))
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('scans.engagementFailed'),
+      )
     } finally {
       setBusy(false)
     }
@@ -1231,6 +1258,16 @@ export function ScansPage() {
                       >
                         {t('common.findings')}
                       </Link>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void onDownloadEngagement(s)}
+                        className="inline-flex items-center gap-1 rounded-md border border-surface-600 px-2 py-1 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+                        title={t('scans.engagementPdf')}
+                      >
+                        <FileDown className="h-3 w-3" />
+                        {t('scans.engagementPdf')}
+                      </button>
                       {canWrite &&
                       (s.status === 'pending' || s.status === 'failed') ? (
                         <button

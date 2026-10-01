@@ -421,6 +421,25 @@ export const api = {
     )
   },
 
+  getEngagementReport(
+    opts: {
+      scan_id?: string
+      asset_id?: string
+      engagement_type?: 'va' | 'pt' | 'discovery' | 'compliance' | 'custom'
+      top_n?: number
+    } = {},
+  ) {
+    const q = new URLSearchParams()
+    if (opts.scan_id) q.set('scan_id', opts.scan_id)
+    if (opts.asset_id) q.set('asset_id', opts.asset_id)
+    if (opts.engagement_type) q.set('engagement_type', opts.engagement_type)
+    if (opts.top_n != null) q.set('top_n', String(opts.top_n))
+    const qs = q.toString()
+    return request<Record<string, unknown>>(
+      `/api/v1/reports/engagement${qs ? `?${qs}` : ''}`,
+    )
+  },
+
   async downloadCompliancePdf(
     kind: 'iso27001' | 'pci-dss' | 'gdpr' | 'nist-csf',
     opts: { asset_id?: string } = {},
@@ -453,6 +472,53 @@ export const api = {
     a.href = url
     const assetSuffix = opts.asset_id ? `-asset-${opts.asset_id.slice(0, 8)}` : ''
     a.download = `nexusec-${kind}${assetSuffix}-${new Date().toISOString().slice(0, 10)}.pdf`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  async downloadEngagementPdf(
+    opts: {
+      scan_id?: string
+      asset_id?: string
+      engagement_type?: 'va' | 'pt' | 'discovery' | 'compliance' | 'custom'
+      top_n?: number
+    } = {},
+  ) {
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const orgId = getOrganizationId()
+    if (orgId) headers.set('X-Organization-Id', orgId)
+    const q = new URLSearchParams()
+    if (opts.scan_id) q.set('scan_id', opts.scan_id)
+    if (opts.asset_id) q.set('asset_id', opts.asset_id)
+    if (opts.engagement_type) q.set('engagement_type', opts.engagement_type)
+    if (opts.top_n != null) q.set('top_n', String(opts.top_n))
+    const qs = q.toString()
+    const res = await fetch(
+      `/api/v1/reports/engagement/pdf${qs ? `?${qs}` : ''}`,
+      { headers },
+    )
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = (await res.json()) as { detail?: string }
+        if (typeof body.detail === 'string') detail = body.detail
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(res.status, detail)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const bits = ['nexusec-engagement']
+    if (opts.engagement_type) bits.push(opts.engagement_type)
+    if (opts.scan_id) bits.push(`scan-${opts.scan_id.slice(0, 8)}`)
+    if (opts.asset_id) bits.push(`asset-${opts.asset_id.slice(0, 8)}`)
+    bits.push(new Date().toISOString().slice(0, 10))
+    a.download = `${bits.join('-')}.pdf`
     a.click()
     URL.revokeObjectURL(url)
   },

@@ -444,6 +444,44 @@ export function VulnerabilitiesPage() {
     }
   }
 
+  async function exportEngagement(format: 'json' | 'pdf' = 'pdf') {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    const scopeOpts = {
+      ...(filterAssetId ? { asset_id: filterAssetId } : {}),
+      ...(filterScanId ? { scan_id: filterScanId } : {}),
+    }
+    try {
+      if (usingMock || token === 'demo') {
+        setError(t('vulns.reportLiveRequired'))
+        return
+      }
+      if (format === 'pdf') {
+        await api.downloadEngagementPdf(scopeOpts)
+        setNotice(t('vulns.engagementPdfExported'))
+      } else {
+        const report = await api.getEngagementReport(scopeOpts)
+        const bits = ['nexusec-engagement']
+        if (filterScanId) bits.push(`scan-${filterScanId.slice(0, 8)}`)
+        if (filterAssetId) bits.push(`asset-${filterAssetId.slice(0, 8)}`)
+        bits.push(new Date().toISOString().slice(0, 10))
+        downloadText(
+          `${bits.join('-')}.json`,
+          JSON.stringify(report, null, 2),
+          'application/json',
+        )
+        setNotice(t('vulns.engagementExported'))
+      }
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('vulns.engagementFailed'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -466,6 +504,22 @@ export function VulnerabilitiesPage() {
           >
             <Download className="h-3.5 w-3.5" />
             {t('vulns.exportCsv')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportEngagement('json')}
+            className="rounded-lg border border-accent/40 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+          >
+            {t('vulns.engagementJson')}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportEngagement('pdf')}
+            className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/20 disabled:opacity-50"
+          >
+            {t('vulns.engagementPdf')}
           </button>
           <button
             type="button"

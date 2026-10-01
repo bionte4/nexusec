@@ -1,4 +1,4 @@
-"""Compliance report export endpoints (ISO 27001, PCI-DSS, GDPR, NIST + PDF)."""
+"""Compliance + engagement report export endpoints (JSON / PDF)."""
 
 from __future__ import annotations
 
@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import RequireAdmin, RequireSocOrAbove, RequireTenant
-from app.schemas.reports import ComplianceReport
+from app.schemas.reports import ComplianceReport, EngagementReport
 from app.services.backfill_service import BackfillService
 from app.services.compliance_pdf import render_compliance_pdf
 from app.services.compliance_report_service import ComplianceReportService
+from app.services.engagement_pdf import render_engagement_pdf
+from app.services.engagement_report_service import EngagementReportService
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -22,6 +24,12 @@ _REPORT_KINDS = ("iso27001", "pci-dss", "gdpr", "nist-csf")
 
 def get_report_service(db: AsyncSession = Depends(get_db)) -> ComplianceReportService:
     return ComplianceReportService(db)
+
+
+def get_engagement_service(
+    db: AsyncSession = Depends(get_db),
+) -> EngagementReportService:
+    return EngagementReportService(db)
 
 
 async def _generate(
@@ -40,6 +48,74 @@ async def _generate(
     if kind == "nist-csf":
         return await service.generate_nist_csf(current_user, asset_id=asset_id)
     raise HTTPException(status_code=404, detail=f"Unknown report kind: {kind}")
+
+
+@router.get(
+    "/engagement",
+    response_model=EngagementReport,
+    summary="VA/PT engagement report (JSON / PDF-ready)",
+)
+async def engagement_report(
+    current_user: RequireSocOrAbove,
+    scan_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings from this scan"
+    ),
+    asset_id: uuid.UUID | None = Query(
+        None, description="Limit report to findings for this asset"
+    ),
+    engagement_type: str | None = Query(
+        None,
+        description="Optional filter: va | pt | discovery | compliance | custom",
+        pattern="^(va|pt|discovery|compliance|custom)$",
+    ),
+    top_n: int = Query(25, ge=1, le=100, description="Top findings listed first"),
+    service: EngagementReportService = Depends(get_engagement_service),
+) -> EngagementReport:
+    return await service.generate(
+        current_user,
+        scan_id=scan_id,
+        asset_id=asset_id,
+        engagement_type=engagement_type,
+        top_n=top_n,
+    )
+
+
+@router.get(
+    "/engagement/pdf",
+    summary="Download VA/PT engagement report as PDF",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def engagement_report_pdf(
+    current_user: RequireSocOrAbove,
+    scan_id: uuid.UUID | None = Query(None),
+    asset_id: uuid.UUID | None = Query(None),
+    engagement_type: str | None = Query(
+        None,
+        pattern="^(va|pt|discovery|compliance|custom)$",
+    ),
+    top_n: int = Query(25, ge=1, le=100),
+    service: EngagementReportService = Depends(get_engagement_service),
+) -> Response:
+    report = await service.generate(
+        current_user,
+        scan_id=scan_id,
+        asset_id=asset_id,
+        engagement_type=engagement_type,
+        top_n=top_n,
+    )
+    pdf_bytes = render_engagement_pdf(report)
+    parts = ["nexusec-engagement", report.engagement_type]
+    if scan_id:
+        parts.append(f"scan-{str(scan_id)[:8]}")
+    if asset_id:
+        parts.append(f"asset-{str(asset_id)[:8]}")
+    parts.append(report.metadata.generated_at.date().isoformat())
+    filename = "-".join(parts) + ".pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get(
@@ -161,6 +237,13 @@ async def backfill_metadata(
 async def list_report_types(_: RequireSocOrAbove) -> dict[str, list[dict[str, str]]]:
     return {
         "reports": [
+            {
+                "id": "engagement",
+                "path": "/api/v1/reports/engagement",
+                "pdf": "/api/v1/reports/engagement/pdf",
+                "standard": "NexuSec VA/PT Engagement",
+                "query": "scan_id, asset_id, engagement_type (optional)",
+            },
             {
                 "id": "iso27001",
                 "path": "/api/v1/reports/iso27001",

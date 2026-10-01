@@ -456,7 +456,29 @@ UI: **SOC Chat** — tanya dalam bahasa natural, contoh:
 
 ---
 
-## 8. Laporan compliance
+## 8. Laporan engagement VA/PT & compliance
+
+### 8.0 Engagement report (hasil VA/PT ke klien)
+
+Laporan engagement berisi cover/metadata, scope + RoE notes, metodologi, ringkasan severity/status, daftar scan, top findings, highlight remedi, dan ringkasan retest.
+
+**UI**
+- **Vulnerabilities** → **Engagement JSON / Engagement PDF** (mengikuti filter `scan_id` / `asset_id` aktif)
+- **Scans** → tombol **Engagement PDF** per baris scan
+
+**API**
+
+```bash
+# Seluruh org (atau filter)
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement" | python3 -m json.tool
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement?scan_id=$SCAN_ID" -o engagement.json
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID" -o engagement.pdf
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement?engagement_type=pt&asset_id=$ASSET_ID" | python3 -m json.tool
+```
+
+Review manusia wajib sebelum kirim ke klien. Lampirkan RoE tertulis.
+
+### 8.1 Laporan compliance
 
 ```bash
 # Org-wide
