@@ -82,9 +82,18 @@ python3 -c "import secrets; print('POSTGRES_PASSWORD=' + secrets.token_urlsafe(2
 python3 -c "import secrets; print('REDIS_PASSWORD=' + secrets.token_urlsafe(24))"
 ```
 
-Isi minimal di `.env` (jangan commit file ini):
+Isi minimal di `.env` (jangan commit file ini). **Urutan penting:** rate limit & SSRF di atas, lalu Application:
 
 ```bash
+# --- Rate limiting (P1) — taruh di bagian atas .env ---
+RATE_LIMIT_ENABLED=true
+
+# --- Scanner SSRF / private targets (P1) ---
+# true  = produksi VPS (blok RFC1918, loopback, metadata cloud)
+# false = hanya lab yang perlu scan LAN/private
+SCAN_BLOCK_PRIVATE_TARGETS=true
+
+# --- Application ---
 APP_NAME=NexuSec
 APP_ENV=production
 DEBUG=false
@@ -106,9 +115,11 @@ AI_REMEDIATION_FALLBACK_MOCK=false
 AI_FP_FALLBACK_MOCK=false
 AI_SOC_CHAT_FALLBACK_MOCK=false
 
-# Scanner: OpenVAS/ZAP mock = lab saja. Produksi VA: nmap/nuclei (+ OpenVAS live).
+# Scanner: OpenVAS/ZAP mock = lab saja. Produksi VA: nmap/nuclei + Import ZAP/OpenVAS nyata.
 OPENVAS_MODE=mock
 ```
+
+Referensi lengkap variabel: [`.env.example`](../.env.example) (bagian `# --- Rate limiting` dan `# --- Scanner SSRF`).
 
 ## 5. Bind API/UI ke localhost
 
@@ -231,35 +242,60 @@ User pertama menjadi Super Admin.
 
 1. Buka https://nexusec.my.id → login.
 2. **Admin → Sistem → Ai**: isi Groq API key, Base URL `https://api.groq.com/openai/v1`, model `openai/gpt-oss-20b` → **Simpan** → **Uji koneksi**.
-3. Daftarkan aset → jalankan scan (Nmap / Nuclei / ZAP mock).
+3. Daftarkan aset (centang **CDE scope** untuk aset PCI) → jalankan scan:
+   - Prefer **Nmap / Nuclei** atau **Import** ZAP JSON / OpenVAS XML.
+   - Mock ZAP/OpenVAS = lab saja (memblokir Client PDF).
+4. Centang **RoE** sebelum start scan / pipeline.
+5. Alur laporan (P2/P3):
+   - **Vulnerabilities** → Draft PDF (internal).
+   - Admin → **Approve client** (dual control).
+   - **Client PDF** (`delivery=client`).
+   - PCI report default **CDE-only**.
 
-Detail AI: [`ai-integration.md`](ai-integration.md).
+Detail AI: [`ai-integration.md`](ai-integration.md). VA/PT: [`usage-va-pt.md`](usage-va-pt.md).
 
 ## 11. Update & backup
 
 ```bash
 cd /opt/nexusec
-git pull
-docker compose up -d --build
 
-# Backup Postgres
+# Backup Postgres dulu
 docker compose exec -T postgres pg_dump -U nexusec nexusec \
   | gzip > ~/nexusec-$(date +%F).sql.gz
+
+git pull
+
+# Rebuild services yang dipakai scan + laporan
+docker compose up -d --build --force-recreate api frontend scanner-worker worker
+
+# Migrasi DB (termasuk 012_engagement_approvals) jalan otomatis di entrypoint API.
+# Verifikasi:
+docker compose logs api --tail 80 | grep -i alembic
+docker compose ps
+curl -sS https://nexusec.my.id/api/v1/health
+```
+
+Jika baru menambah/mengubah `RATE_LIMIT_ENABLED` / `SCAN_BLOCK_PRIVATE_TARGETS` di `.env`:
+
+```bash
+docker compose up -d --force-recreate api scanner-worker
 ```
 
 ## 12. Checklist keamanan
 
 - [ ] Semua `CHANGE_ME` diganti; `.env` tidak di-commit
 - [ ] `APP_ENV=production`, `DEBUG=false`
+- [ ] `RATE_LIMIT_ENABLED=true` (bagian atas `.env`)
+- [ ] `SCAN_BLOCK_PRIVATE_TARGETS=true` (produksi; `false` hanya lab LAN)
 - [ ] `AI_*_FALLBACK_MOCK=false` + Admin → Test connection OK
-- [ ] `SCAN_BLOCK_PRIVATE_TARGETS=true` (blok RFC1918/metadata kecuali lab LAN)
-- [ ] `RATE_LIMIT_ENABLED=true`
 - [ ] `CORS_ORIGINS` hanya HTTPS domain produksi
 - [ ] Port 8000/8081/5433/6379 hanya di `127.0.0.1`
 - [ ] UFW: 22 + 80 + 443
 - [ ] HTTPS Certbot aktif
 - [ ] Password admin ≥ 12 karakter
 - [ ] Backup DB terjadwal
+- [ ] Client engagement PDF hanya setelah dual-control approve
+- [ ] Aset PCI ditandai `is_cde_scope`
 
 ## 13. Troubleshooting
 
@@ -271,12 +307,17 @@ docker compose exec -T postgres pg_dump -U nexusec nexusec \
 | `JSON decode error` saat register | Body curl kosong/rusak — pakai `-d @file.json` |
 | Password ditolak | Minimal 12 karakter |
 | Scan stuck `queued` | `docker compose logs scanner-worker worker` |
+| Target private ditolak | `SCAN_BLOCK_PRIVATE_TARGETS=true` — set `false` hanya untuk lab LAN, lalu recreate `api` + `scanner-worker` |
+| 429 Too Many Requests | Rate limit aktif (`RATE_LIMIT_ENABLED`); tunggu window atau naikkan hanya jika perlu |
+| Client PDF ditolak (dual-control) | Admin harus **Approve client** dulu untuk scope yang sama; atau pakai Draft PDF |
+| Engagement export mock blocked | Jangan pakai ZAP/OpenVAS mock untuk klien; Import report nyata / `allow_mock=true` lab saja |
 | AI uji gagal | Base URL harus `https://api.groq.com/openai/v1` (bukan `console.groq.com/keys`); model contoh `openai/gpt-oss-20b` |
 | OOM / container kill | Naikkan RAM VPS |
 
 ## Referensi
 
 - Quick start lokal: [`../README.md`](../README.md)
-- VA/PT usage: [`usage-va-pt.md`](usage-va-pt.md)
+- VA/PT usage (RoE, engagement, dual-control, PCI CDE): [`usage-va-pt.md`](usage-va-pt.md)
 - Hardening integrasi: [`integrations-hardening.md`](integrations-hardening.md)
 - Scanner connectors: [`scanner-connectors.md`](scanner-connectors.md)
+- Template env: [`../.env.example`](../.env.example)

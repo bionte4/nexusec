@@ -126,12 +126,23 @@ class EngagementReportService:
             asset_id=asset_id,
             engagement_type=engagement_type,
         )
+        # Draft = internal/lab preview: mock findings allowed with hard warnings.
+        # Client delivery still fail-closed unless allow_mock=true (lab override).
+        effective_allow_mock = allow_mock or delivery == "draft"
         mock_policy = assert_engagement_export_allowed(
-            scans, vulns, allow_mock=allow_mock
+            scans, vulns, allow_mock=effective_allow_mock
         )
         export_warnings: list[str] = []
         if mock_policy.get("warning"):
             export_warnings.append(str(mock_policy["warning"]))
+        if delivery == "draft" and (
+            mock_policy.get("mock_scan_count")
+            or mock_policy.get("synthetic_finding_count")
+        ):
+            export_warnings.append(
+                "Draft includes mock/synthetic evidence — not for client delivery. "
+                "Import real nmap/nuclei/ZAP/OpenVAS reports, then use Client PDF."
+            )
 
         approval_svc = EngagementApprovalService(self.db)
         approval_row = None

@@ -39,6 +39,19 @@ assets 1──* vulnerabilities
 
 Plus normalized columns: `title`, `severity`, `cvss_score`, `cvss_vector`, `cwe_id`, `status`.
 
+## Engagement dual-control (P3)
+
+`engagement_approvals` — admin/lead sign-off before `delivery=client` engagement PDF.
+
+| Column | Notes |
+|--------|--------|
+| `organization_id` | Tenant scope |
+| `scan_id` / `asset_id` / `engagement_type` | Optional scope fingerprint (null = org-wide) |
+| `approved_by_id` / `approved_at` | Dual-control actor |
+| `revoked_at` / `revoked_by_id` | Soft revoke |
+
+Migration: `012_engagement_approvals`.
+
 ## Migrations
 
 ```bash

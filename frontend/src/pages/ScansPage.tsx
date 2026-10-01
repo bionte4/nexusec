@@ -585,6 +585,7 @@ export function ScansPage() {
       await api.downloadEngagementPdf({
         scan_id: scan.id,
         engagement_type: engagementType,
+        delivery: 'draft',
       })
       setNotice(t('scans.engagementPdfExported', { name: scan.name }))
     } catch (err) {

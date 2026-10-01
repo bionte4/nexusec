@@ -464,7 +464,9 @@ Laporan engagement berisi cover/metadata, **classification**, scope + RoE notes,
 
 **Gate keamanan (P0)**
 - Scan enqueue **wajib** `config.roe_acknowledged=true` (atau `lab_mode=true` hanya di non-production).
-- Export engagement **diblok** jika ada finding sintetis / job ZAP·OpenVAS mock. Override lab: `allow_mock=true` (bukan untuk klien).
+- Export engagement **Client PDF** (`delivery=client`) **diblok** jika ada finding sintetis / job ZAP·OpenVAS mock.
+- **Draft PDF/JSON** (`delivery=draft`) tetap bisa diunduh untuk review internal, dengan warning + classification lab/draft.
+- Override lab eksplisit: `allow_mock=true` (bukan untuk klien).
 - Aksi `scan.enqueue` dan `report.engagement.export` dicatat di audit log.
 
 **Kualitas VA/PT (P2)**

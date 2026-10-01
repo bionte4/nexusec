@@ -35,9 +35,12 @@ Live `gmp` mode requires `gvm-cli` + a configured appliance; otherwise the worke
 3. CORS limited to real UI origins (`CORS_ORIGINS`).
 4. JWT `SECRET_KEY` ≥ 48 URL-safe bytes; short access-token TTL.
 5. Scanner wrappers use argv lists (`shell=False`); never pass raw user strings into shells.
-6. Production: `SCAN_BLOCK_PRIVATE_TARGETS=true` (blocks RFC1918 / loopback / cloud metadata hostnames).
-7. `RATE_LIMIT_ENABLED=true` on API (login/register/scans/AI/reports).
-8. AI API keys in `platform_settings` are sealed at rest (`enc:v1:…` via SECRET_KEY).
-9. Disable unused AI/ticket/SIEM integrations in production until keys are rotated and scoped.
-10. Prefer mock OpenVAS in shared demos; isolate live GVM credentials to private workers only.
-11. Production VPS: bind API/UI to `127.0.0.1`, terminate TLS at Nginx, open only 22/80/443 — see [`deploy-vps.md`](deploy-vps.md).
+6. **`.env` placement (top of file, before Application):**
+   - `RATE_LIMIT_ENABLED=true` — login/register/scans/AI/reports → 429 when exceeded.
+   - `SCAN_BLOCK_PRIVATE_TARGETS=true` — production: block RFC1918 / loopback / cloud metadata. Lab LAN only: `false`, then recreate `api` + `scanner-worker`.
+7. AI API keys in `platform_settings` are sealed at rest (`enc:v1:…` via SECRET_KEY).
+8. Disable unused AI/ticket/SIEM integrations in production until keys are rotated and scoped.
+9. Prefer mock OpenVAS/ZAP only in shared demos; production VA uses nmap/nuclei + **import** real ZAP/OpenVAS reports.
+10. Engagement **Client PDF** requires dual-control admin approval (`delivery=client`); drafts do not.
+11. PCI-DSS reports default to **CDE-only** (`is_cde_scope` assets).
+12. Production VPS: bind API/UI to `127.0.0.1`, terminate TLS at Nginx, open only 22/80/443 — see [`deploy-vps.md`](deploy-vps.md).

@@ -50,14 +50,13 @@ API docs: http://localhost:8000/docs
 
 ## Usage guides
 
-- **Deploy VPS (production):** [`docs/deploy-vps.md`](docs/deploy-vps.md) — Ubuntu, Docker Compose, Nginx, DNS, Certbot, domain contoh `nexusec.my.id`
-- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas/zap), authenticated VA + ROE, normalize, triage, compliance reports
+- **Deploy VPS (production):** [`docs/deploy-vps.md`](docs/deploy-vps.md) — Ubuntu, Docker Compose, Nginx, DNS, Certbot; `.env` P1 (`RATE_LIMIT_ENABLED`, `SCAN_BLOCK_PRIVATE_TARGETS`) di bagian atas
+- **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas/zap), RoE, import reports, engagement draft/client PDF + dual-control, PCI CDE-only
 - **AI integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — Admin UI settings form, Groq/OpenRouter/OpenAI/Ollama, remediation + bulk, FP, ChatOps
 - **Scanner connectors (UI cards):** [`docs/scanner-connectors.md`](docs/scanner-connectors.md) — Nmap, Nuclei, NexuSec, OpenVAS, ZAP presets, unauthenticated catalogs (`webserver` / `dbserver` / `appserver`), worker config, troubleshooting
 - **Greenbone live GMP:** [`docs/greenbone-gvm.md`](docs/greenbone-gvm.md) — connect `python-gvm` to an external GVM appliance
 - Data model: [`docs/data-model.md`](docs/data-model.md)
 - Integrations & hardening: [`docs/integrations-hardening.md`](docs/integrations-hardening.md)
-
 ## Auth (Prompt 2)
 
 ```bash

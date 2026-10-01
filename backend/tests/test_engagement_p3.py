@@ -160,6 +160,53 @@ async def test_client_delivery_blocked_without_approval() -> None:
 
 
 @pytest.mark.asyncio
+async def test_draft_allows_mock_with_warning() -> None:
+    """Draft PDF must not hard-block mock jobs; Client PDF still does."""
+    from app.services.scan_policy import EngagementExportBlocked, assert_engagement_export_allowed
+
+    org = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    scan = Scan(
+        id=uuid.uuid4(),
+        organization_id=org,
+        name="zap mock",
+        scan_type=ScanType.VA,
+        engine=ScannerEngine.ZAP,
+        status=ScanStatus.COMPLETED,
+        progress=100.0,
+        config={"zap_mode": "mock", "roe_acknowledged": True},
+        created_at=now,
+        updated_at=now,
+    )
+    vuln = Vulnerability(
+        id=uuid.uuid4(),
+        organization_id=org,
+        scan_id=scan.id,
+        asset_id=uuid.uuid4(),
+        fingerprint=uuid.uuid4().hex,
+        title="ZAP mock XSS",
+        description="synthetic dast",
+        severity=Severity.MEDIUM,
+        status=FindingStatus.OPEN,
+        evidence={"nexusec_mock": True},
+        mitre_attack_techniques=[],
+        compliance_metadata={},
+        raw_source={},
+        source_tool="zap",
+        first_seen_at=now,
+        last_seen_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    with pytest.raises(EngagementExportBlocked):
+        assert_engagement_export_allowed([scan], [vuln], allow_mock=False)
+    info = assert_engagement_export_allowed([scan], [vuln], allow_mock=True)
+    assert info["mock_scan_count"] == 1
+    assert info["synthetic_finding_count"] == 1
+    assert info.get("warning")
+
+
+@pytest.mark.asyncio
 async def test_assert_client_delivery_with_approval() -> None:
     svc = EngagementApprovalService(AsyncMock())
     approval = EngagementApproval(
