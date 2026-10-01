@@ -15,6 +15,7 @@ from app.core.enums import (
     FindingStatus,
     ScanType,
     Severity,
+    UserRole,
 )
 from app.models.asset import Asset
 from app.models.scan import Scan
@@ -27,6 +28,8 @@ from app.schemas.reports import (
     ReportMetadata,
     ReportSection,
 )
+from app.services.audit_service import AuditService
+from app.services.scan_policy import assert_engagement_export_allowed
 
 _SEVERITY_ORDER = {
     Severity.CRITICAL: 0,
@@ -98,14 +101,27 @@ class EngagementReportService:
         asset_id: Optional[uuid.UUID] = None,
         engagement_type: Optional[str] = None,
         top_n: int = 25,
+        allow_mock: bool = False,
     ) -> EngagementReport:
         org_id = auditor.organization_id
+        if org_id is None and auditor.role != UserRole.SUPER_ADMIN:
+            raise ValueError(
+                "Organization scope required for engagement export "
+                "(user has no organization_id)"
+            )
         scans, vulns, assets = await self._load_scope(
             organization_id=org_id,
             scan_id=scan_id,
             asset_id=asset_id,
             engagement_type=engagement_type,
         )
+        mock_policy = assert_engagement_export_allowed(
+            scans, vulns, allow_mock=allow_mock
+        )
+        export_warnings: list[str] = []
+        if mock_policy.get("warning"):
+            export_warnings.append(str(mock_policy["warning"]))
+
         rows = self._to_rows(vulns)
         rows_sorted = sorted(
             rows,
@@ -283,7 +299,15 @@ class EngagementReportService:
                 "for confirmed PT findings.",
             )
 
-        return EngagementReport(
+        disclaimer = (
+            "This report is generated from NexuSec orchestration data. "
+            "Human review is required before client delivery. "
+            "Only authorized targets under a written Rules of Engagement (RoE) may be assessed."
+        )
+        if export_warnings:
+            disclaimer += " WARNING: This export was generated with allow_mock=true and may include lab/synthetic findings — not for client delivery."
+
+        report = EngagementReport(
             metadata=meta,
             engagement_type=eng_type,
             executive_summary=exec_summary,
@@ -297,7 +321,31 @@ class EngagementReportService:
             remediation_highlights=remediation_highlights,
             retest_summary=retest_section,
             recommendations=recommendations,
+            disclaimer=disclaimer,
+            export_warnings=export_warnings,
+            mock_policy=mock_policy,
         )
+        try:
+            await AuditService(self.db).record(
+                action="report.engagement.export",
+                resource_type="reports",
+                resource_id=str(meta.report_id),
+                actor_id=auditor.id,
+                organization_id=org_id,
+                details={
+                    "engagement_type": eng_type,
+                    "scan_id": str(scan_id) if scan_id else None,
+                    "asset_id": str(asset_id) if asset_id else None,
+                    "findings": len(rows),
+                    "allow_mock": allow_mock,
+                    "mock_scan_count": mock_policy.get("mock_scan_count"),
+                    "synthetic_finding_count": mock_policy.get("synthetic_finding_count"),
+                },
+                status_code=200,
+            )
+        except Exception:
+            pass
+        return report
 
     async def _load_scope(
         self,

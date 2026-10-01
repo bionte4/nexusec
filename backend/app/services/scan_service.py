@@ -12,10 +12,13 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import get_settings
 from app.core.enums import ScanStatus, ScannerEngine
 from app.models.asset import Asset
 from app.models.scan import Scan, ScanAsset
 from app.schemas.scan import ScanCreate, ScanListResponse, ScanRead
+from app.services.audit_service import AuditService
+from app.services.scan_policy import assert_roe_for_scan
 
 # Allow importing Celery tasks from /workers
 _ROOT = Path(__file__).resolve().parents[3]
@@ -63,6 +66,10 @@ class ScanService:
             ScannerEngine.ZAP,
         }:
             self._ensure_scan_targets(assets, engine=payload.engine)
+            try:
+                assert_roe_for_scan(payload.config or {}, settings=get_settings())
+            except ValueError as exc:
+                raise ScanValidationError(str(exc)) from exc
 
         scan = Scan(
             organization_id=organization_id,
@@ -84,16 +91,31 @@ class ScanService:
         task_id: Optional[str] = None
         if payload.start_immediately:
             # enqueue() commits so Celery workers see the row before .delay()
-            task_id = await self.enqueue(scan.id, engine=payload.engine)
+            task_id = await self.enqueue(
+                scan.id, engine=payload.engine, actor_id=created_by_id
+            )
 
         await self.db.refresh(scan, attribute_names=["assets"])
         # reload with assets
         scan = await self._get_scan(scan.id)
         return _to_read(scan), task_id
 
-    async def enqueue(self, scan_id: UUID, *, engine: Optional[ScannerEngine] = None) -> str:
+    async def enqueue(
+        self,
+        scan_id: UUID,
+        *,
+        engine: Optional[ScannerEngine] = None,
+        actor_id: Optional[UUID] = None,
+    ) -> str:
         scan = await self._get_scan(scan_id)
         eng = engine or scan.engine
+        try:
+            assert_roe_for_scan(
+                scan.config if isinstance(scan.config, dict) else {},
+                settings=get_settings(),
+            )
+        except ValueError as exc:
+            raise ScanValidationError(str(exc)) from exc
 
         # Critical: commit before broker publish. Otherwise an idle scanner-worker
         # can claim the task before Postgres has the Scan row → "scan not found"
@@ -129,6 +151,32 @@ class ScanService:
         scan.status = ScanStatus.QUEUED
         scan.celery_task_id = async_result.id
         await self.db.flush()
+        try:
+            await AuditService(self.db).record(
+                action="scan.enqueue",
+                resource_type="scans",
+                resource_id=str(scan.id),
+                actor_id=actor_id or scan.created_by_id,
+                organization_id=scan.organization_id,
+                details={
+                    "engine": eng.value,
+                    "scan_type": scan.scan_type.value
+                    if hasattr(scan.scan_type, "value")
+                    else str(scan.scan_type),
+                    "celery_task_id": async_result.id,
+                    "roe_acknowledged": bool(
+                        isinstance(scan.config, dict)
+                        and scan.config.get("roe_acknowledged") is True
+                    ),
+                    "lab_mode": bool(
+                        isinstance(scan.config, dict) and scan.config.get("lab_mode") is True
+                    ),
+                },
+                status_code=202,
+            )
+        except Exception:
+            # Never block enqueue on audit failure
+            pass
         return async_result.id
 
     async def get(self, scan_id: UUID, *, organization_id: Optional[UUID] = None) -> ScanRead:

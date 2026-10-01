@@ -427,6 +427,7 @@ export const api = {
       asset_id?: string
       engagement_type?: 'va' | 'pt' | 'discovery' | 'compliance' | 'custom'
       top_n?: number
+      allow_mock?: boolean
     } = {},
   ) {
     const q = new URLSearchParams()
@@ -434,6 +435,7 @@ export const api = {
     if (opts.asset_id) q.set('asset_id', opts.asset_id)
     if (opts.engagement_type) q.set('engagement_type', opts.engagement_type)
     if (opts.top_n != null) q.set('top_n', String(opts.top_n))
+    if (opts.allow_mock) q.set('allow_mock', 'true')
     const qs = q.toString()
     return request<Record<string, unknown>>(
       `/api/v1/reports/engagement${qs ? `?${qs}` : ''}`,
@@ -482,6 +484,7 @@ export const api = {
       asset_id?: string
       engagement_type?: 'va' | 'pt' | 'discovery' | 'compliance' | 'custom'
       top_n?: number
+      allow_mock?: boolean
     } = {},
   ) {
     const headers = new Headers()
@@ -494,6 +497,7 @@ export const api = {
     if (opts.asset_id) q.set('asset_id', opts.asset_id)
     if (opts.engagement_type) q.set('engagement_type', opts.engagement_type)
     if (opts.top_n != null) q.set('top_n', String(opts.top_n))
+    if (opts.allow_mock) q.set('allow_mock', 'true')
     const qs = q.toString()
     const res = await fetch(
       `/api/v1/reports/engagement/pdf${qs ? `?${qs}` : ''}`,

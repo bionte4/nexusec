@@ -16,6 +16,7 @@ from app.services.compliance_pdf import render_compliance_pdf
 from app.services.compliance_report_service import ComplianceReportService
 from app.services.engagement_pdf import render_engagement_pdf
 from app.services.engagement_report_service import EngagementReportService
+from app.services.scan_policy import EngagementExportBlocked
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -69,15 +70,25 @@ async def engagement_report(
         pattern="^(va|pt|discovery|compliance|custom)$",
     ),
     top_n: int = Query(25, ge=1, le=100, description="Top findings listed first"),
+    allow_mock: bool = Query(
+        False,
+        description="Allow lab/synthetic findings (not for client delivery)",
+    ),
     service: EngagementReportService = Depends(get_engagement_service),
 ) -> EngagementReport:
-    return await service.generate(
-        current_user,
-        scan_id=scan_id,
-        asset_id=asset_id,
-        engagement_type=engagement_type,
-        top_n=top_n,
-    )
+    try:
+        return await service.generate(
+            current_user,
+            scan_id=scan_id,
+            asset_id=asset_id,
+            engagement_type=engagement_type,
+            top_n=top_n,
+            allow_mock=allow_mock,
+        )
+    except EngagementExportBlocked as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(
@@ -94,21 +105,33 @@ async def engagement_report_pdf(
         pattern="^(va|pt|discovery|compliance|custom)$",
     ),
     top_n: int = Query(25, ge=1, le=100),
+    allow_mock: bool = Query(
+        False,
+        description="Allow lab/synthetic findings (not for client delivery)",
+    ),
     service: EngagementReportService = Depends(get_engagement_service),
 ) -> Response:
-    report = await service.generate(
-        current_user,
-        scan_id=scan_id,
-        asset_id=asset_id,
-        engagement_type=engagement_type,
-        top_n=top_n,
-    )
+    try:
+        report = await service.generate(
+            current_user,
+            scan_id=scan_id,
+            asset_id=asset_id,
+            engagement_type=engagement_type,
+            top_n=top_n,
+            allow_mock=allow_mock,
+        )
+    except EngagementExportBlocked as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     pdf_bytes = render_engagement_pdf(report)
     parts = ["nexusec-engagement", report.engagement_type]
     if scan_id:
         parts.append(f"scan-{str(scan_id)[:8]}")
     if asset_id:
         parts.append(f"asset-{str(asset_id)[:8]}")
+    if allow_mock:
+        parts.append("lab")
     parts.append(report.metadata.generated_at.date().isoformat())
     filename = "-".join(parts) + ".pdf"
     return Response(

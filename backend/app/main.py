@@ -10,6 +10,7 @@ from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.metrics import build_instrumentator, refresh_scan_gauges
 from app.middleware.audit import AuditTrailMiddleware
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.services.health_service import HealthService
 
 settings = get_settings()
@@ -48,6 +49,7 @@ app = FastAPI(
 
 # Middleware order: last added runs first on request.
 app.add_middleware(AuditTrailMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

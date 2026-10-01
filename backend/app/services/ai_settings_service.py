@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.secret_box import open_secret, seal_secret
 from app.models.platform_setting import PlatformSetting
 
 logger = logging.getLogger(__name__)
@@ -63,10 +64,23 @@ def normalize_base_url(base_url: str) -> str:
 
 def _normalize(raw: Optional[dict[str, Any]]) -> dict[str, Any]:
     data = dict(raw or {})
+    settings = get_settings()
+    sealed_or_plain = str(data.get("api_key") or "").strip()
     return {
-        "api_key": str(data.get("api_key") or "").strip(),
+        "api_key": open_secret(sealed_or_plain, settings.secret_key),
         "base_url": normalize_base_url(str(data.get("base_url") or "")),
         "model": str(data.get("model") or "").strip(),
+        "enabled": bool(data.get("enabled", True)),
+    }
+
+
+def _to_storage(data: dict[str, Any]) -> dict[str, Any]:
+    """Persist with encrypted api_key."""
+    settings = get_settings()
+    return {
+        "api_key": seal_secret(str(data.get("api_key") or ""), settings.secret_key),
+        "base_url": str(data.get("base_url") or ""),
+        "model": str(data.get("model") or ""),
         "enabled": bool(data.get("enabled", True)),
     }
 
@@ -77,7 +91,8 @@ def _publish_redis(data: dict[str, Any]) -> None:
 
         settings = get_settings()
         client = redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_timeout=2)
-        client.set(REDIS_CACHE_KEY, json.dumps(data))
+        # Store sealed form in Redis (shared across workers)
+        client.set(REDIS_CACHE_KEY, json.dumps(_to_storage(data)))
         client.close()
     except Exception as exc:
         logger.debug("AI settings Redis publish skipped: %s", exc)
@@ -220,18 +235,19 @@ async def save_ai_settings(
         current["enabled"] = bool(enabled)
 
     if row is None:
-        row = PlatformSetting(key=AI_SETTINGS_KEY, value=current)
+        row = PlatformSetting(key=AI_SETTINGS_KEY, value=_to_storage(current))
         db.add(row)
     else:
-        row.value = current
+        row.value = _to_storage(current)
     await db.flush()
     await db.refresh(row)
     set_cached_ai_settings(current)
     logger.info(
-        "Platform AI settings saved (key_set=%s, base_url=%s, model=%s)",
+        "Platform AI settings saved (key_set=%s, base_url=%s, model=%s, sealed=%s)",
         bool(current["api_key"]),
         current["base_url"] or "(env)",
         current["model"] or "(env)",
+        bool(current["api_key"]),
     )
     return current
 

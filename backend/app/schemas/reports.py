@@ -126,3 +126,5 @@ class EngagementReport(BaseModel):
         "Human review is required before client delivery. "
         "Only authorized targets under a written Rules of Engagement (RoE) may be assessed."
     )
+    export_warnings: list[str] = Field(default_factory=list)
+    mock_policy: dict[str, Any] = Field(default_factory=dict)

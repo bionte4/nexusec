@@ -77,6 +77,8 @@ services:
       DEBUG: ${DEBUG:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
       RUN_MIGRATIONS: "true"
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      SCAN_BLOCK_PRIVATE_TARGETS: ${SCAN_BLOCK_PRIVATE_TARGETS:-true}
       OPENVAS_MODE: ${OPENVAS_MODE:-mock}
       GVM_HOST: ${GVM_HOST:-}
       GVM_PORT: ${GVM_PORT:-9390}
@@ -182,6 +184,7 @@ services:
       DEBUG: "false"
       HOME: /tmp
       DISABLE_UPDATE_CHECK: "true"
+      SCAN_BLOCK_PRIVATE_TARGETS: ${SCAN_BLOCK_PRIVATE_TARGETS:-true}
       OPENVAS_MODE: ${OPENVAS_MODE:-mock}
       OPENVAS_GMP_FALLBACK_MOCK: ${OPENVAS_GMP_FALLBACK_MOCK:-false}
       GVM_HOST: ${GVM_HOST:-}

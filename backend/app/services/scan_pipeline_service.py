@@ -7,8 +7,10 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.enums import ScanStatus, ScanType, ScannerEngine
 from app.models.scan import Scan, ScanAsset
+from app.services.scan_policy import assert_roe_for_scan
 from app.services.scan_service import (
     ScanService,
     ScanValidationError,
@@ -88,6 +90,17 @@ class ScanPipelineService:
         pipeline_id = str(uuid4())
         label = (name or "VA pipeline").strip() or "VA pipeline"
         va_cfg = {**default_va_config(va_engine), **(va_config or {})}
+        try:
+            assert_roe_for_scan(va_cfg, settings=get_settings())
+        except ValueError as exc:
+            raise ScanValidationError(str(exc)) from exc
+
+        roe_flags = {
+            "roe_acknowledged": bool(va_cfg.get("roe_acknowledged") is True),
+            "lab_mode": bool(va_cfg.get("lab_mode") is True),
+        }
+        if va_cfg.get("notes"):
+            roe_flags["notes"] = va_cfg.get("notes")
 
         discovery = Scan(
             organization_id=organization_id,
@@ -107,6 +120,7 @@ class ScanPipelineService:
                     "ssl-cert",
                     "mysql-info",
                 ],
+                **roe_flags,
             },
             created_by_id=created_by_id,
         )
@@ -142,7 +156,9 @@ class ScanPipelineService:
         await self.db.flush()
 
         # enqueue commits discovery + follow_up so both rows exist before nmap.delay()
-        task_id = await self.scans.enqueue(discovery.id, engine=discovery.engine)
+        task_id = await self.scans.enqueue(
+            discovery.id, engine=discovery.engine, actor_id=created_by_id
+        )
 
         discovery = await self.scans._get_scan(discovery.id)
         follow_up = await self.scans._get_scan(follow_up.id)

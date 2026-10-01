@@ -462,9 +462,14 @@ UI: **SOC Chat** — tanya dalam bahasa natural, contoh:
 
 Laporan engagement berisi cover/metadata, scope + RoE notes, metodologi, ringkasan severity/status, daftar scan, top findings, highlight remedi, dan ringkasan retest.
 
+**Gate keamanan (P0)**
+- Scan enqueue **wajib** `config.roe_acknowledged=true` (atau `lab_mode=true` hanya di non-production).
+- Export engagement **diblok** jika ada finding sintetis / job ZAP·OpenVAS mock. Override lab: `allow_mock=true` (bukan untuk klien).
+- Aksi `scan.enqueue` dan `report.engagement.export` dicatat di audit log.
+
 **UI**
+- **Scans** → centang RoE sebelum create/pipeline; tombol **Engagement PDF** per scan
 - **Vulnerabilities** → **Engagement JSON / Engagement PDF** (mengikuti filter `scan_id` / `asset_id` aktif)
-- **Scans** → tombol **Engagement PDF** per baris scan
 
 **API**
 
@@ -473,6 +478,8 @@ Laporan engagement berisi cover/metadata, scope + RoE notes, metodologi, ringkas
 curl -s -H "$AUTH" "$API/api/v1/reports/engagement" | python3 -m json.tool
 curl -s -H "$AUTH" "$API/api/v1/reports/engagement?scan_id=$SCAN_ID" -o engagement.json
 curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID" -o engagement.pdf
+# Lab only:
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID&allow_mock=true" -o engagement-lab.pdf
 curl -s -H "$AUTH" "$API/api/v1/reports/engagement?engagement_type=pt&asset_id=$ASSET_ID" | python3 -m json.tool
 ```
 

@@ -1,6 +1,7 @@
 """Integration settings — webhooks, ticketing, SIEM (no secrets in code)."""
 
 from functools import lru_cache
+from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -120,6 +121,14 @@ class Settings(BaseSettings):
     ai_soc_chat_retrieval_limit: int = 25
     ai_soc_chat_max_sources: int = 40
     ai_soc_chat_max_query_chars: int = 4000
+
+    # --- Rate limiting (P1 hardening) ---
+    rate_limit_enabled: bool = True
+
+    # --- Scanner SSRF / private target policy ---
+    # When unset, workers default: block in production APP_ENV, allow in lab.
+    # Override via SCAN_BLOCK_PRIVATE_TARGETS=true|false in worker env.
+    scan_block_private_targets: Optional[bool] = None
 
     # Shared / legacy LLM credentials (Prompts 14–16; still used by FP + ChatOps)
     openai_api_key: str = ""

@@ -138,14 +138,14 @@ async def import_scan_report(
 async def start_scan(
     scan_id: uuid.UUID,
     tenant: RequireTenant,
-    _: RequirePentesterOrAdmin,
+    current_user: RequirePentesterOrAdmin,
     service: ScanService = Depends(get_scan_service),
 ) -> ScanEnqueueResponse:
     org = _org_scope(tenant)
     try:
         # Ensure scan is visible in tenant before enqueue
         await service.get(scan_id, organization_id=org)
-        task_id = await service.enqueue(scan_id)
+        task_id = await service.enqueue(scan_id, actor_id=current_user.id)
         scan = await service.get(scan_id, organization_id=org)
     except ScanNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

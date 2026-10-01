@@ -127,6 +127,7 @@ export function ScansPage() {
   })
 
   const [pipelineVaEngine, setPipelineVaEngine] = useState<ScannerEngine>('nuclei')
+  const [pipelineRoe, setPipelineRoe] = useState(false)
   const [importForm, setImportForm] = useState({
     name: '',
     engine: 'openvas' as ScannerEngine,
@@ -440,6 +441,7 @@ export function ScansPage() {
         name: form.name.trim() || t('scans.pipelineDefaultName'),
         asset_ids: [form.asset_id],
         va_engine: pipelineVaEngine,
+        va_config: { roe_acknowledged: pipelineRoe },
       })
       setNotice(res.message)
       await load()
@@ -963,6 +965,32 @@ export function ScansPage() {
             ) : null}
             {form.engine === 'nuclei' ||
             form.engine === 'openvas' ||
+            form.engine === 'zap' ||
+            form.engine === 'nmap' ||
+            form.engine === 'nexusec' ? (
+              <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <label className="flex items-start gap-2 text-xs text-amber-100">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={form.config.roe_acknowledged === true}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          roe_acknowledged: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  <span>{t('scans.roeAckRequired')}</span>
+                </label>
+                <p className="text-[10px] text-surface-500">{t('scans.roeHint')}</p>
+              </div>
+            ) : null}
+            {form.engine === 'nuclei' ||
+            form.engine === 'openvas' ||
             form.engine === 'zap' ? (
               <div className="space-y-2 rounded-lg border border-surface-700 p-3">
                 <label className="flex items-center gap-2 text-xs text-surface-300">
@@ -988,23 +1016,9 @@ export function ScansPage() {
                 </label>
                 {form.config.authenticated === true ? (
                   <>
-                    <label className="flex items-start gap-2 text-xs text-warn">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={form.config.roe_acknowledged === true}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            config: {
-                              ...form.config,
-                              roe_acknowledged: e.target.checked,
-                            },
-                          })
-                        }
-                      />
-                      <span>{t('scans.roeAck')}</span>
-                    </label>
+                    <p className="text-[10px] text-surface-500">
+                      {t('scans.roeAckAuthNote')}
+                    </p>
                     {form.engine === 'nuclei' ? (
                       <div className="grid gap-2">
                         <label className="space-y-1 text-[11px] text-surface-400">
@@ -1176,7 +1190,12 @@ export function ScansPage() {
             </label>
             <button
               type="submit"
-              disabled={busy || !form.name.trim() || !form.asset_id}
+              disabled={
+                busy ||
+                !form.name.trim() ||
+                !form.asset_id ||
+                form.config.roe_acknowledged !== true
+              }
               className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-surface-950 transition hover:bg-accent-dim disabled:opacity-50"
             >
               {busy ? t('scans.queuing') : t('scans.create')}
@@ -1188,6 +1207,15 @@ export function ScansPage() {
               <p className="text-[10px] text-surface-500">
                 {t('scans.pipelineHint')}
               </p>
+              <label className="flex items-start gap-2 text-xs text-amber-100">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={pipelineRoe}
+                  onChange={(e) => setPipelineRoe(e.target.checked)}
+                />
+                <span>{t('scans.roeAckRequired')}</span>
+              </label>
               <select
                 value={pipelineVaEngine}
                 onChange={(e) =>
@@ -1202,7 +1230,7 @@ export function ScansPage() {
               </select>
               <button
                 type="button"
-                disabled={busy || !form.asset_id}
+                disabled={busy || !form.asset_id || !pipelineRoe}
                 onClick={() => void onCreatePipeline()}
                 className="w-full rounded-lg border border-accent/50 px-3 py-2 text-sm font-semibold text-accent transition hover:bg-accent/10 disabled:opacity-50"
               >

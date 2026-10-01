@@ -157,6 +157,12 @@ const en = {
     authenticatedVa: 'Authenticated VA (credentialed)',
     roeAck:
       'I confirm written Rules of Engagement / authorization for credentialed scanning of these assets.',
+    roeAckRequired:
+      'I confirm written Rules of Engagement (RoE) and authorization for these targets',
+    roeHint:
+      'Required before enqueue. Production rejects lab_mode bypass. Unauthorized scanning is prohibited.',
+    roeAckAuthNote:
+      'Authenticated VA still requires the RoE checkbox above before start.',
     authType: 'Auth type',
     authUsername: 'Username',
     authPassword: 'Password',
@@ -613,6 +619,12 @@ const id: Messages = {
     authenticatedVa: 'VA terautentikasi (berkredensial)',
     roeAck:
       'Saya mengonfirmasi Rules of Engagement / izin tertulis untuk scan berkredensial pada aset ini.',
+    roeAckRequired:
+      'Saya mengonfirmasi Rules of Engagement (RoE) dan otorisasi tertulis untuk target ini',
+    roeHint:
+      'Wajib sebelum enqueue. Produksi menolak bypass lab_mode. Scan tanpa izin dilarang.',
+    roeAckAuthNote:
+      'VA terautentikasi tetap membutuhkan centang RoE di atas sebelum start.',
     authType: 'Tipe auth',
     authUsername: 'Username',
     authPassword: 'Password',

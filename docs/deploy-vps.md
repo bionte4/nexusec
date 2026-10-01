@@ -252,6 +252,8 @@ docker compose exec -T postgres pg_dump -U nexusec nexusec \
 - [ ] Semua `CHANGE_ME` diganti; `.env` tidak di-commit
 - [ ] `APP_ENV=production`, `DEBUG=false`
 - [ ] `AI_*_FALLBACK_MOCK=false` + Admin → Test connection OK
+- [ ] `SCAN_BLOCK_PRIVATE_TARGETS=true` (blok RFC1918/metadata kecuali lab LAN)
+- [ ] `RATE_LIMIT_ENABLED=true`
 - [ ] `CORS_ORIGINS` hanya HTTPS domain produksi
 - [ ] Port 8000/8081/5433/6379 hanya di `127.0.0.1`
 - [ ] UFW: 22 + 80 + 443
