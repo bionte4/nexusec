@@ -52,6 +52,7 @@ _METHODOLOGY: dict[str, str] = {
     "nuclei": "Template-driven vulnerability detection (ProjectDiscovery Nuclei).",
     "openvas": "Authenticated/unauthenticated vulnerability assessment (OpenVAS/GVM).",
     "zap": "Dynamic application security testing baseline (OWASP ZAP).",
+    "osint": "Passive open-source intelligence (DNS, Certificate Transparency, RDAP).",
     "nexusec": "NexuSec platform checks and normalized ingestion pipeline.",
     "other": "External scanner output imported and normalized into NexuSec.",
 }
@@ -759,7 +760,7 @@ class EngagementReportService:
                 if hasattr(s.engine, "value")
                 else str(s.engine)
             )
-            == "nmap"
+            in {"nmap", "osint"}
             for s in scans
         )
         va_done = "va" in types or any(

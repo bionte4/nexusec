@@ -22,6 +22,7 @@ from workers.tool_wrappers.base import (
 from workers.tool_wrappers.nmap import DEFAULT_NMAP_FLAGS, NmapScanRequest, NmapWrapper
 from workers.tool_wrappers.nuclei import NucleiScanRequest, NucleiWrapper
 from workers.tool_wrappers.openvas import OpenVasScanRequest, OpenVasWrapper
+from workers.tool_wrappers.osint import OsintScanRequest, OsintWrapper
 from workers.tool_wrappers.zap import ZapScanRequest, ZapWrapper
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,38 @@ def _nuclei_targets_from_assets(assets: list[Asset]) -> list[str]:
     return unique
 
 
+def _osint_domains_from_assets(assets: list[Asset]) -> list[str]:
+    """Domain/FQDN targets only — OSINT is not for bare IPs."""
+    from workers.tool_wrappers.validators import (
+        TargetValidationError,
+        coerce_host,
+        validate_domain,
+    )
+
+    targets: list[str] = []
+    for asset in assets:
+        candidates: list[str] = []
+        if asset.domain:
+            candidates.append(asset.domain)
+        if asset.hostname:
+            candidates.append(asset.hostname)
+        url = (getattr(asset, "url", None) or "").strip()
+        if url:
+            candidates.append(url)
+        for c in candidates:
+            try:
+                targets.append(validate_domain(coerce_host(c)))
+            except (TargetValidationError, Exception):
+                logger.warning("Skipping invalid OSINT domain: %r", c)
+    seen: set[str] = set()
+    unique: list[str] = []
+    for t in targets:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+    return unique
+
+
 def _update_scan(
     session: Session,
     scan: Scan,
@@ -203,6 +236,7 @@ def _normalize_and_ingest(session: Session, *, scan: Scan, engine: ScannerEngine
         ScannerEngine.NEXUSEC: "nexusec",
         ScannerEngine.OPENVAS: "openvas",
         ScannerEngine.ZAP: "zap",
+        ScannerEngine.OSINT: "osint",
     }.get(engine, engine.value)
 
     try:
@@ -275,6 +309,8 @@ def _maybe_enqueue_pipeline_next(session: Session, scan: Scan) -> Optional[str]:
             async_result = run_openvas_scan.delay(str(follow.id))
         elif engine == ScannerEngine.ZAP:
             async_result = run_zap_scan.delay(str(follow.id))
+        elif engine == ScannerEngine.OSINT:
+            async_result = run_osint_scan.delay(str(follow.id))
         else:
             logger.warning("Pipeline next engine unsupported: %s", engine)
             follow.status = ScanStatus.FAILED
@@ -1114,6 +1150,139 @@ def run_zap_scan(self, scan_id: str) -> dict[str, Any]:
         return out
 
 
+@celery_app.task(name="scans.run_osint", bind=True, max_retries=5, default_retry_delay=2)
+def run_osint_scan(self, scan_id: str) -> dict[str, Any]:
+    """Passive OSINT (DNS + crt.sh + RDAP) and ingest normalized findings."""
+    try:
+        scan_uuid = UUID(scan_id)
+    except ValueError:
+        logger.error("Invalid scan_id: %s", scan_id)
+        return {"scan_id": scan_id, "status": "failed", "error": "invalid scan_id"}
+
+    with session_scope() as session:
+        scan = _load_scan(session, scan_uuid, self, scan_id)
+
+        scan.celery_task_id = self.request.id
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.RUNNING,
+            progress=5.0,
+            mark_started=True,
+            error_message=None,
+        )
+
+        targets = _osint_domains_from_assets(list(scan.assets))
+        if not targets:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message="No valid domain targets on linked assets (OSINT requires FQDN)",
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": "no targets"}
+
+        cfg = scan.config or {}
+        timeout = int(cfg.get("timeout_seconds") or 60)
+        modules = cfg.get("osint_modules") or cfg.get("modules") or list(
+            ("dns", "crtsh", "rdap")
+        )
+        if isinstance(modules, str):
+            modules = [m.strip() for m in modules.split(",") if m.strip()]
+        max_subs = int(cfg.get("max_subdomains") or 50)
+
+        try:
+            wrapper = OsintWrapper()
+            result = wrapper.run(
+                OsintScanRequest(
+                    targets=targets,
+                    modules=list(modules),
+                    timeout_seconds=timeout,
+                    max_subdomains=max_subs,
+                )
+            )
+        except ToolExecutionError as exc:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=str(exc),
+                mark_completed=True,
+            )
+            return {"scan_id": scan_id, "status": "failed", "error": str(exc)}
+
+        stdout = result.stdout
+        truncated = False
+        if len(stdout) > _MAX_RESULT_CHARS:
+            stdout = stdout[:_MAX_RESULT_CHARS]
+            truncated = True
+
+        payload = {
+            "engine": ScannerEngine.OSINT.value,
+            "targets": targets,
+            "returncode": result.returncode,
+            "command": list(result.command),
+            "stdout_json": stdout,
+            "stderr": (result.stderr or "")[:10_000],
+            "truncated": truncated,
+            "finished_at": _utcnow().isoformat(),
+            "tool_version": result.tool_version,
+        }
+
+        if result.returncode != 0:
+            _update_scan(
+                session,
+                scan,
+                status=ScanStatus.FAILED,
+                progress=100.0,
+                error_message=f"osint exited with code {result.returncode}",
+                result_payload=payload,
+                mark_completed=True,
+            )
+            return {
+                "scan_id": scan_id,
+                "status": "failed",
+                "returncode": result.returncode,
+            }
+
+        ingest_stats = _normalize_and_ingest(
+            session,
+            scan=scan,
+            engine=ScannerEngine.OSINT,
+            raw_output=stdout,
+        )
+        payload["ingest"] = {
+            "inserted": ingest_stats.inserted,
+            "updated": ingest_stats.updated,
+            "skipped": ingest_stats.skipped,
+            "unmatched_targets": ingest_stats.unmatched_targets[:20],
+        }
+
+        _update_scan(
+            session,
+            scan,
+            status=ScanStatus.COMPLETED,
+            progress=100.0,
+            error_message=None,
+            result_payload=payload,
+            mark_completed=True,
+        )
+        next_task = _maybe_enqueue_pipeline_next(session, scan)
+        out = {
+            "scan_id": scan_id,
+            "status": "completed",
+            "targets": targets,
+            "returncode": 0,
+            "ingest": payload["ingest"],
+        }
+        if next_task:
+            out["pipeline_next_task_id"] = next_task
+        return out
+
+
 @celery_app.task(name="scans.run_scan", bind=True)
 def run_scan(self, scan_id: str) -> dict[str, Any]:
     """Dispatcher — routes to engine-specific Celery tasks."""
@@ -1165,6 +1334,15 @@ def run_scan(self, scan_id: str) -> dict[str, Any]:
 
     if engine == ScannerEngine.ZAP:
         async_result = run_zap_scan.delay(scan_id)
+        return {
+            "scan_id": scan_id,
+            "status": "delegated",
+            "engine": engine.value,
+            "task_id": async_result.id,
+        }
+
+    if engine == ScannerEngine.OSINT:
+        async_result = run_osint_scan.delay(scan_id)
         return {
             "scan_id": scan_id,
             "status": "delegated",

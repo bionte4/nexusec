@@ -51,6 +51,7 @@ API docs: http://localhost:8000/docs
 ## Usage guides
 
 - **Deploy VPS (production):** [`docs/deploy-vps.md`](docs/deploy-vps.md) — Ubuntu, Docker Compose, Nginx, DNS, Certbot; `.env` P1 (`RATE_LIMIT_ENABLED`, `SCAN_BLOCK_PRIVATE_TARGETS`) di bagian atas
+- **OSINT connector:** [`docs/osint-connector.md`](docs/osint-connector.md) — passive DNS + Certificate Transparency (crt.sh) + RDAP
 - **VA tanpa Greenbone (Nmap / Nuclei / Import):** [`docs/va-without-gvm.md`](docs/va-without-gvm.md) — jalur produksi VPS tanpa GVM
 - **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas/zap), RoE + `roe_id`, import reports, engagement draft/client PDF, dual-control SoD, PTES/ASVS, PCI CDE-only
 - **AI integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — Admin UI settings form, Groq/OpenRouter/OpenAI/Ollama, remediation + bulk, FP, ChatOps

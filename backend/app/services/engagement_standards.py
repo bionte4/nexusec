@@ -231,7 +231,7 @@ def build_ptes_checklist(
         and (s.config.get("roe_acknowledged") is True or s.config.get("roe_id"))
         for s in scans
     )
-    discovery = "discovery" in types or "nmap" in engines
+    discovery = "discovery" in types or "nmap" in engines or "osint" in engines
     va = "va" in types or bool(engines & {"nuclei", "openvas", "zap", "nexusec"})
     confirmed = sum(1 for r in rows if r.status == FindingStatus.CONFIRMED)
     reporting = dual_control_approved or delivery == "draft"

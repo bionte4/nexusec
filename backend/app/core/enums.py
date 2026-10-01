@@ -68,6 +68,7 @@ class ScannerEngine(str, enum.Enum):
     NUCLEI = "nuclei"
     OPENVAS = "openvas"
     ZAP = "zap"
+    OSINT = "osint"
     OTHER = "other"
 
 

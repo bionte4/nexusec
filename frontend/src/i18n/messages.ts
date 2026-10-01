@@ -130,17 +130,21 @@ const en = {
       'View-only for SOC Analyst. Ask Admin/Pentester to run scans.',
     engineHint: 'Scanner engine used by the worker',
     presetDiscovery: 'Discovery · nmap',
+    presetOsint: 'OSINT · dns/CT/RDAP',
     presetNuclei: 'VA · nuclei',
     presetNucleiAuth: 'VA · nuclei auth',
     presetNexusec: 'VA · nexusec',
     presetOpenvas: 'VA · openvas',
     presetZap: 'DAST · zap',
     presetDiscoveryName: 'Discovery (nmap)',
+    presetOsintName: 'OSINT (dns · crt.sh · RDAP)',
     presetNucleiName: 'VA (nuclei)',
     presetNucleiAuthName: 'VA (nuclei · authenticated)',
     presetNexusecName: 'VA (nexusec)',
     presetOpenvasName: 'VA (openvas)',
     presetZapName: 'DAST (OWASP ZAP)',
+    osintHint:
+      'Passive OSINT only (DNS + Certificate Transparency + RDAP). Requires a domain asset and RoE. No Amass/subfinder binary needed.',
     presetMockLabTitle:
       'Lab/CI only — mock findings cannot be exported in client engagement reports',
     presetOpenvasTitle:
@@ -623,17 +627,21 @@ const id: Messages = {
       'Hanya lihat untuk Analis SOC. Minta Admin/Pentester menjalankan scan.',
     engineHint: 'Mesin pemindai yang dipakai worker',
     presetDiscovery: 'Discovery · nmap',
+    presetOsint: 'OSINT · dns/CT/RDAP',
     presetNuclei: 'VA · nuclei',
     presetNucleiAuth: 'VA · nuclei auth',
     presetNexusec: 'VA · nexusec',
     presetOpenvas: 'VA · openvas',
     presetZap: 'DAST · zap',
     presetDiscoveryName: 'Discovery (nmap)',
+    presetOsintName: 'OSINT (dns · crt.sh · RDAP)',
     presetNucleiName: 'VA (nuclei)',
     presetNucleiAuthName: 'VA (nuclei · terautentikasi)',
     presetNexusecName: 'VA (nexusec)',
     presetOpenvasName: 'VA (openvas)',
     presetZapName: 'DAST (OWASP ZAP)',
+    osintHint:
+      'OSINT pasif saja (DNS + Certificate Transparency + RDAP). Butuh aset domain + RoE. Tidak perlu binary Amass/subfinder.',
     presetMockLabTitle:
       'Hanya lab/CI — finding mock tidak bisa diekspor ke laporan engagement klien',
     presetOpenvasTitle:

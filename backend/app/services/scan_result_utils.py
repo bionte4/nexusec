@@ -40,6 +40,7 @@ def findings_from_scan(scan: Scan) -> list[NormalizedFinding]:
         ScannerEngine.NEXUSEC: "nexusec",
         ScannerEngine.OPENVAS: "openvas",
         ScannerEngine.ZAP: "zap",
+        ScannerEngine.OSINT: "osint",
     }.get(scan.engine, scan.engine.value)
     try:
         parser = registry.get(parser_name)

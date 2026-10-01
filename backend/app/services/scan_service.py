@@ -64,6 +64,7 @@ class ScanService:
             ScannerEngine.NUCLEI,
             ScannerEngine.OPENVAS,
             ScannerEngine.ZAP,
+            ScannerEngine.OSINT,
         }:
             self._ensure_scan_targets(assets, engine=payload.engine)
             try:
@@ -147,10 +148,14 @@ class ScanService:
             from workers.tasks import run_zap_scan
 
             async_result = run_zap_scan.delay(str(scan_id))
+        elif eng == ScannerEngine.OSINT:
+            from workers.tasks import run_osint_scan
+
+            async_result = run_osint_scan.delay(str(scan_id))
         else:
             raise ScanValidationError(
                 f"Engine '{eng.value}' is not implemented yet "
-                "(supported: nmap, nuclei, nexusec, openvas, zap)"
+                "(supported: nmap, nuclei, nexusec, openvas, zap, osint)"
             )
 
         scan.status = ScanStatus.QUEUED
@@ -260,6 +265,12 @@ class ScanService:
             if engine == ScannerEngine.NUCLEI or engine == ScannerEngine.ZAP:
                 if (asset.url or "").strip():
                     continue
+            if engine == ScannerEngine.OSINT:
+                if asset.domain or asset.hostname or (asset.url or "").strip():
+                    continue
+                raise ScanValidationError(
+                    f"Asset {asset.id} needs a domain/hostname/URL for OSINT"
+                )
             if asset.asset_type == AssetType.IP and asset.ip_address:
                 continue
             if asset.asset_type == AssetType.DOMAIN and asset.domain:

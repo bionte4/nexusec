@@ -51,6 +51,12 @@ const ENGINES: { id: ScannerEngine; ready: boolean; label: string; blurb: string
     label: 'OWASP ZAP',
     blurb: 'DAST · import real ZAP JSON (mock = lab only)',
   },
+  {
+    id: 'osint',
+    ready: true,
+    label: 'OSINT',
+    blurb: 'Passive recon · DNS + CT (crt.sh) + RDAP',
+  },
   { id: 'other', ready: false, label: 'Other', blurb: 'Coming soon' },
 ]
 
@@ -137,6 +143,7 @@ export function ScansPage() {
 
   type PresetId =
     | 'discovery_nmap'
+    | 'discovery_osint'
     | 'va_nuclei'
     | 'va_nuclei_auth'
     | 'va_nexusec'
@@ -159,6 +166,20 @@ export function ScansPage() {
             'ssl-cert',
             'mysql-info',
           ],
+        },
+      }))
+      return
+    }
+    if (preset === 'discovery_osint') {
+      setForm((f) => ({
+        ...f,
+        name: f.name || t('scans.presetOsintName'),
+        scan_type: 'discovery',
+        engine: 'osint',
+        config: {
+          osint_modules: ['dns', 'crtsh', 'rdap'],
+          max_subdomains: 50,
+          timeout_seconds: 60,
         },
       }))
       return
@@ -655,7 +676,7 @@ export function ScansPage() {
           {t('scans.connectorsTitle')}
         </h2>
         <p className="text-xs text-surface-400">{t('scans.connectorsSubtitle')}</p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {ENGINES.filter((e) => e.id !== 'other').map((eng) => {
             const selected = form.engine === eng.id
             return (
@@ -669,6 +690,7 @@ export function ScansPage() {
                   else if (eng.id === 'zap') applyPreset('va_zap')
                   else if (eng.id === 'nuclei') applyPreset('va_nuclei')
                   else if (eng.id === 'nexusec') applyPreset('va_nexusec')
+                  else if (eng.id === 'osint') applyPreset('discovery_osint')
                   else applyPreset('discovery_nmap')
                 }}
                 className={`rounded-xl border px-4 py-3 text-left transition ${
@@ -715,6 +737,13 @@ export function ScansPage() {
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
               >
                 {t('scans.presetDiscovery')}
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset('discovery_osint')}
+                className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+              >
+                {t('scans.presetOsint')}
               </button>
               <button
                 type="button"
@@ -1005,11 +1034,47 @@ export function ScansPage() {
                 </div>
               </div>
             ) : null}
+            {form.engine === 'osint' ? (
+              <div className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2 py-2">
+                <p className="text-[11px] text-sky-100">{t('scans.osintHint')}</p>
+                <div className="flex flex-wrap gap-3 text-xs text-surface-300">
+                  {(['dns', 'crtsh', 'rdap'] as const).map((mod) => {
+                    const selected = Array.isArray(form.config.osint_modules)
+                      ? (form.config.osint_modules as string[])
+                      : ['dns', 'crtsh', 'rdap']
+                    const checked = selected.includes(mod)
+                    return (
+                      <label key={mod} className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const next = checked
+                              ? selected.filter((c) => c !== mod)
+                              : [...selected, mod]
+                            setForm({
+                              ...form,
+                              config: {
+                                ...form.config,
+                                osint_modules:
+                                  next.length > 0 ? next : ['dns', 'crtsh', 'rdap'],
+                              },
+                            })
+                          }}
+                        />
+                        {mod}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
             {form.engine === 'nuclei' ||
             form.engine === 'openvas' ||
             form.engine === 'zap' ||
             form.engine === 'nmap' ||
-            form.engine === 'nexusec' ? (
+            form.engine === 'nexusec' ||
+            form.engine === 'osint' ? (
               <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                 <label className="flex items-start gap-2 text-xs text-amber-100">
                   <input
@@ -1457,6 +1522,7 @@ export function ScansPage() {
               <option value="nexusec">nexusec JSON</option>
               <option value="openvas">openvas / GVM XML</option>
               <option value="zap">zap JSON</option>
+              <option value="osint">osint JSON</option>
             </select>
             <textarea
               required

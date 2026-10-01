@@ -224,6 +224,7 @@ class ScanImportService:
             ScannerEngine.NEXUSEC,
             ScannerEngine.OPENVAS,
             ScannerEngine.ZAP,
+            ScannerEngine.OSINT,
         }:
             raise ScanValidationError(f"Import not supported for engine {engine.value}")
 
@@ -252,7 +253,7 @@ class ScanImportService:
             else "stdout_jsonl"
             if engine == ScannerEngine.NUCLEI
             else "stdout_json"
-            if engine == ScannerEngine.ZAP
+            if engine in {ScannerEngine.ZAP, ScannerEngine.OSINT}
             else "raw"
         )
         import_config: dict[str, Any] = {
@@ -274,7 +275,11 @@ class ScanImportService:
         scan = Scan(
             organization_id=organization_id,
             name=(name or f"Import ({engine.value})").strip()[:255],
-            scan_type=ScanType.VA if engine != ScannerEngine.NMAP else ScanType.DISCOVERY,
+            scan_type=(
+                ScanType.DISCOVERY
+                if engine in {ScannerEngine.NMAP, ScannerEngine.OSINT}
+                else ScanType.VA
+            ),
             engine=engine,
             status=ScanStatus.COMPLETED,
             progress=100.0,

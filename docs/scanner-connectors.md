@@ -16,6 +16,7 @@ Di halaman **Scans**, bagian atas form menampilkan kartu engine siap pakai:
 | **Nuclei** | `nuclei` | Ready | VA · template-driven checks |
 | **NexuSec** | `nexusec` | Ready | VA · custom async scanner |
 | **OpenVAS** | `openvas` | Ready | VA · Greenbone GVM (GMP / import; mock = lab) |
+| **OSINT** | `osint` | Ready | Passivecon · DNS + CT + RDAP (pasif) |
 | **OWASP ZAP** | `zap` | Ready | DAST · import JSON nyata (mock = lab) |
 
 **Cara kerja di UI**

@@ -134,6 +134,7 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 | Engine | Tipe scan tipikal | Keterangan |
 |--------|-------------------|------------|
 | `nmap` | `discovery` / `va` | Port/service fingerprint + NSE unauthenticated; `port_preset` `common_va` / `webserver` / `dbserver` / `appserver` |
+| `osint` | `discovery` | Passivecon pasif: DNS + Certificate Transparency (crt.sh) + RDAP — lihat [`osint-connector.md`](osint-connector.md) |
 | `nuclei` | `va` / `pt` | Template-driven VA; default packs `http`+`ssl`+`network` (tanpa kredensial) |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
 | `openvas` | `va` | Greenbone/OpenVAS — default **GMP** / `report_xml`; mock + `lab_mode` untuk lab saja |

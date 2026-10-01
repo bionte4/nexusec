@@ -14,6 +14,7 @@ NexuSec **sudah menyertakan** Nmap + Nuclei di `scanner-worker`, serta **Import*
 | **Nmap** (discovery / fingerprint) | Ya — live di `scanner-worker` | Tidak |
 | **Nuclei** (VA template-driven) | Ya — binary + templates di image | Tidak |
 | **Import report** (XML/JSON) | Ya — UI Scans + API | Tidak |
+| **OSINT** (DNS / crt.sh / RDAP) | Ya — engine `osint` | Tidak |
 | **OpenVAS GMP** (live) | Klien saja | **Ya** — appliance terpisah |
 | **ZAP daemon** | Belum live | — (pakai Import JSON ZAP) |
 
@@ -54,7 +55,7 @@ Cek health: `GET /api/v1/health/detailed` → `tools.nmap` / `tools.nuclei` ters
 ```text
 1. Assets → daftarkan IP/domain/URL (centang CDE bila PCI)
 2. Scans → centang RoE (+ isi RoE ID bila ada)
-3a. Preset Discovery · nmap  → Start
+3a. Preset Discovery · nmap **atau OSINT · dns/CT/RDAP** → Start
 3b. Preset VA · nuclei       → Start
     atau Pipeline: discovery → VA (nuclei)
 4. Opsional: Import scanner report (OpenVAS XML / ZAP JSON dari mesin lain)

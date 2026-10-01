@@ -478,6 +478,11 @@ class WorkerMonitorService:
                 "path": zap_bin,
                 "mode": zap_mode,
             }
+            tools["osint"] = {
+                "available": True,
+                "modules": ["dns", "crtsh", "rdap"],
+                "note": "Passive DNS + crt.sh + RDAP (no external OSINT binary)",
+            }
             return tools
 
         return await asyncio.to_thread(_which)
