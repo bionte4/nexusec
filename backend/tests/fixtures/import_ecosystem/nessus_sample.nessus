@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<NessusClientData_v2>
+  <Report name="fixture">
+    <ReportHost name="10.0.0.20">
+      <HostProperties>
+        <tag name="host-ip">10.0.0.20</tag>
+      </HostProperties>
+      <ReportItem port="443" svc_name="www" protocol="tcp" severity="3" pluginID="11213" pluginName="HTTP TRACE / TRACK Methods Allowed" pluginFamily="Web Servers">
+        <description>The remote web server supports the TRACE and/or TRACK methods.</description>
+        <synopsis>HTTP TRACE enabled.</synopsis>
+        <solution>Disable TRACE/TRACK.</solution>
+        <risk_factor>Medium</risk_factor>
+        <cvss_base_score>5.0</cvss_base_score>
+        <cve>CVE-2004-2320</cve>
+        <cwe>693</cwe>
+      </ReportItem>
+    </ReportHost>
+  </Report>
+</NessusClientData_v2>

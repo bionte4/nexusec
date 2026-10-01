@@ -154,8 +154,9 @@ class ScanService:
             async_result = run_osint_scan.delay(str(scan_id))
         else:
             raise ScanValidationError(
-                f"Engine '{eng.value}' is not implemented yet "
-                "(supported: nmap, nuclei, nexusec, openvas, zap, osint)"
+                f"Engine '{eng.value}' cannot be live-queued "
+                "(supported workers: nmap, nuclei, nexusec, openvas, zap, osint; "
+                "use POST /api/v1/scans/import-report for sarif/generic/trivy/burp/nessus)"
             )
 
         scan.status = ScanStatus.QUEUED

@@ -232,6 +232,11 @@ export type ScannerEngine =
   | 'openvas'
   | 'zap'
   | 'osint'
+  | 'sarif'
+  | 'generic'
+  | 'trivy'
+  | 'burp'
+  | 'nessus'
   | 'other'
 
 export interface Asset {

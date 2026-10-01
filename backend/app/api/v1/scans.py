@@ -108,7 +108,7 @@ async def create_va_pipeline(
 @router.post(
     "/import-report",
     status_code=status.HTTP_201_CREATED,
-    summary="Import raw scanner report (nmap/nuclei/nexusec/openvas/zap/osint) and ingest findings",
+    summary="Import raw scanner report (nmap/nuclei/nexusec/openvas/zap/osint/sarif/generic/trivy/burp/nessus) and ingest findings",
 )
 async def import_scan_report(
     payload: ImportReportRequest,

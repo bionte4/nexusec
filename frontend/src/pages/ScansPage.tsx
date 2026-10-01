@@ -1660,7 +1660,12 @@ export function ScansPage() {
             >
               <option value="nmap">nmap XML</option>
               <option value="nuclei">nuclei JSONL</option>
-              <option value="nexusec">nexusec JSON</option>
+              <option value="nexusec">nexusec JSON (strict)</option>
+              <option value="generic">generic JSON (aliases)</option>
+              <option value="sarif">SARIF 2.1 JSON</option>
+              <option value="trivy">Trivy JSON</option>
+              <option value="burp">Burp issues XML</option>
+              <option value="nessus">Nessus .nessus XML</option>
               <option value="openvas">openvas / GVM XML</option>
               <option value="zap">zap JSON</option>
               <option value="osint">osint JSON</option>

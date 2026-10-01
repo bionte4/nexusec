@@ -403,7 +403,7 @@ Di UI Scans: pilih aset → pilih VA engine → **Start discovery → VA**.
 
 ### Import laporan
 
-`POST /api/v1/scans/import-report` menerima raw XML/JSONL/JSON, membuat scan `completed`, lalu ingest finding (batas 2MB). Engine: `nmap`, `nuclei`, `nexusec`, `openvas`, **`zap`**. Import ditandai `config.imported=true` (+ `report_json`/`report_xml`) sehingga **tidak** dianggap mock.
+`POST /api/v1/scans/import-report` menerima raw XML/JSONL/JSON, membuat scan `completed`, lalu ingest finding (batas 2MB). Engine: `nmap`, `nuclei`, `nexusec`, `openvas`, `zap`, `osint`, plus ekosistem import **`sarif`**, **`generic`**, **`trivy`**, **`burp`**, **`nessus`**. Import ditandai `config.imported=true` (+ `report_json`/`report_xml` untuk zap/openvas) sehingga **tidak** dianggap mock. Detail kontrak parser: [`import-ecosystem.md`](import-ecosystem.md).
 
 ---
 
@@ -415,9 +415,15 @@ Semua connector masuk registry yang sama (`build_default_registry`):
 |-------------|---------------|
 | `nmap` | Nmap XML |
 | `nuclei` | Nuclei JSON / JSONL |
-| `nexusec` | Custom JSON findings |
+| `nexusec` | Custom JSON findings (strict schema) |
+| `generic` | Lenient JSON findings (field aliases) |
 | `openvas` | OpenVAS / GVM report XML |
 | `zap` | OWASP ZAP JSON (site.alerts) |
+| `osint` | OSINT JSON |
+| `sarif` | OASIS SARIF 2.1 |
+| `trivy` | Trivy JSON |
+| `burp` | Burp issues XML |
+| `nessus` | Nessus `.nessus` XML |
 
 Fingerprint stabil per `(asset, vuln_id/tool fields)` mencegah duplikat saat re-scan. Gold-set regresi: `backend/tests/fixtures/gold/` + `test_gold_set_eval.py`.
 

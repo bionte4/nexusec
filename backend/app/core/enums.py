@@ -69,6 +69,12 @@ class ScannerEngine(str, enum.Enum):
     OPENVAS = "openvas"
     ZAP = "zap"
     OSINT = "osint"
+    # Import-ecosystem engines (report ingest; not live workers)
+    SARIF = "sarif"
+    GENERIC = "generic"
+    TRIVY = "trivy"
+    BURP = "burp"
+    NESSUS = "nessus"
     OTHER = "other"
 
 

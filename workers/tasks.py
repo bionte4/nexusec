@@ -230,14 +230,9 @@ def _normalize_and_ingest(session: Session, *, scan: Scan, engine: ScannerEngine
     )
 
     registry = build_default_registry()
-    parser_name = {
-        ScannerEngine.NMAP: "nmap",
-        ScannerEngine.NUCLEI: "nuclei",
-        ScannerEngine.NEXUSEC: "nexusec",
-        ScannerEngine.OPENVAS: "openvas",
-        ScannerEngine.ZAP: "zap",
-        ScannerEngine.OSINT: "osint",
-    }.get(engine, engine.value)
+    from app.normalization.engine_map import parser_name_for_engine
+
+    parser_name = parser_name_for_engine(engine)
 
     try:
         parser = registry.get(parser_name)

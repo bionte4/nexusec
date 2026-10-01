@@ -1,0 +1,41 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ExampleSAST",
+          "rules": [
+            {
+              "id": "XSS001",
+              "name": "Reflected XSS",
+              "shortDescription": { "text": "Cross-site scripting" },
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "cwe": "CWE-79" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "XSS001",
+          "level": "error",
+          "message": { "text": "Unescaped user input in search parameter" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.com/search"
+                },
+                "region": {
+                  "snippet": { "text": "q=<script>" }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

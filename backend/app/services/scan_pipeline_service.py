@@ -218,14 +218,12 @@ class ScanImportService:
             normalize_scan_raw_result,
         )
 
-        if engine not in {
-            ScannerEngine.NMAP,
-            ScannerEngine.NUCLEI,
-            ScannerEngine.NEXUSEC,
-            ScannerEngine.OPENVAS,
-            ScannerEngine.ZAP,
-            ScannerEngine.OSINT,
-        }:
+        from app.normalization.engine_map import (
+            IMPORTABLE_ENGINES,
+            XML_IMPORT_ENGINES,
+        )
+
+        if engine not in IMPORTABLE_ENGINES:
             raise ScanValidationError(f"Import not supported for engine {engine.value}")
 
         raw = (raw or "").strip()
@@ -247,15 +245,12 @@ class ScanImportService:
             raise ScanValidationError(f"Invalid report for {engine.value}: {exc}") from exc
 
         now = datetime.now(timezone.utc)
-        result_key = (
-            "stdout_xml"
-            if engine in {ScannerEngine.NMAP, ScannerEngine.OPENVAS}
-            else "stdout_jsonl"
-            if engine == ScannerEngine.NUCLEI
-            else "stdout_json"
-            if engine in {ScannerEngine.ZAP, ScannerEngine.OSINT}
-            else "raw"
-        )
+        if engine in XML_IMPORT_ENGINES:
+            result_key = "stdout_xml"
+        elif engine == ScannerEngine.NUCLEI:
+            result_key = "stdout_jsonl"
+        else:
+            result_key = "stdout_json"
         import_config: dict[str, Any] = {
             "imported": True,
             "last_result": {

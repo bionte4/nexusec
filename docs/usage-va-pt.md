@@ -203,7 +203,7 @@ curl -s -X POST "$API/api/v1/scans/pipeline" \
   }" | python3 -m json.tool
 ```
 
-**Import report** (tanpa menjalankan scanner):
+**Import report** (tanpa menjalankan scanner) — engine: `nmap` | `nuclei` | `openvas` | `zap` | `osint` | `sarif` | `generic` | `trivy` | `burp` | `nessus` (lihat [`import-ecosystem.md`](import-ecosystem.md)):
 
 ```bash
 curl -s -X POST "$API/api/v1/scans/import-report" \

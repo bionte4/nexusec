@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<issues burpVersion="2024.1.1" exportTime="Thu Oct 01 00:00:00 UTC 2026">
+  <issue>
+    <serialNumber>1</serialNumber>
+    <type>2097936</type>
+    <name>SQL injection</name>
+    <host ip="10.0.0.9">https://app.example.com</host>
+    <path>/login</path>
+    <location>/login</location>
+    <severity>High</severity>
+    <confidence>Certain</confidence>
+    <issueBackground>SQL injection may allow data theft.</issueBackground>
+    <issueDetail>The password parameter appears vulnerable.</issueDetail>
+    <remediationBackground>Use parameterized queries.</remediationBackground>
+    <vulnerabilityClassifications>CWE-89: Improper Neutralization of Special Elements used in an SQL Command</vulnerabilityClassifications>
+  </issue>
+</issues>
