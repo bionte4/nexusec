@@ -27,6 +27,7 @@ from app.schemas.reports import (
     EngagementScanInfo,
     ReportMetadata,
     ReportSection,
+    VerificationRow,
 )
 from app.services.audit_service import AuditService
 from app.services.scan_policy import assert_engagement_export_allowed
@@ -102,7 +103,17 @@ class EngagementReportService:
         engagement_type: Optional[str] = None,
         top_n: int = 25,
         allow_mock: bool = False,
+        delivery: str = "draft",
     ) -> EngagementReport:
+        from app.services.engagement_approval_service import (
+            EngagementApprovalError,
+            EngagementApprovalService,
+        )
+
+        delivery = (delivery or "draft").lower().strip()
+        if delivery not in {"draft", "client"}:
+            raise ValueError("delivery must be 'draft' or 'client'")
+
         org_id = auditor.organization_id
         if org_id is None and auditor.role != UserRole.SUPER_ADMIN:
             raise ValueError(
@@ -121,6 +132,22 @@ class EngagementReportService:
         export_warnings: list[str] = []
         if mock_policy.get("warning"):
             export_warnings.append(str(mock_policy["warning"]))
+
+        approval_svc = EngagementApprovalService(self.db)
+        approval_row = None
+        if org_id is not None:
+            approval_row = await approval_svc.find_active(
+                organization_id=org_id,
+                scan_id=scan_id,
+                asset_id=asset_id,
+                engagement_type=engagement_type,
+            )
+        try:
+            approval_svc.assert_client_delivery_allowed(
+                approval_row, delivery=delivery
+            )
+        except EngagementApprovalError as exc:
+            raise ValueError(str(exc)) from exc
 
         rows = self._to_rows(vulns)
         rows_sorted = sorted(
@@ -248,26 +275,109 @@ class EngagementReportService:
             narrative=" ".join(methodology_lines),
         )
 
+        limitations = ReportSection(
+            heading="Limitations & assumptions",
+            summary=(
+                "This engagement is bounded by RoE, scanner coverage, and time window. "
+                "Absence of a finding does not prove absence of vulnerability."
+            ),
+            metrics={
+                "point_in_time": True,
+                "authenticated_coverage": any(
+                    isinstance(s.config, dict) and s.config.get("authenticated") is True
+                    for s in scans
+                ),
+                "imported_reports": any(
+                    isinstance(s.config, dict)
+                    and (
+                        bool(s.config.get("report_json"))
+                        or bool(s.config.get("report_xml"))
+                        or s.config.get("imported") is True
+                    )
+                    for s in scans
+                ),
+            },
+            narrative=(
+                "Limitations: (1) Results reflect a point-in-time assessment. "
+                "(2) Unauthenticated scans miss post-login attack surface unless "
+                "authenticated VA / imported DAST was used. "
+                "(3) Mock or lab scanner modes are not client-grade evidence. "
+                "(4) AI remediation/FP text is advisory only. "
+                "(5) Business logic and multi-step abuse may require manual PT beyond tooling."
+            ),
+        )
+
+        verification_matrix = self._build_verification_matrix(rows_sorted)
+        crit_high_open = [
+            r
+            for r in rows_sorted
+            if r.severity in {Severity.CRITICAL, Severity.HIGH}
+            and r.status in ACTIVE_FINDING_STATUSES
+        ]
+        crit_high_open_no_retest = [r for r in crit_high_open if not r.last_retest_scan_id]
+        closed_with_retest = sum(
+            1 for r in rows_sorted if r.verification_state == "closed_with_retest"
+        )
+        closed_without_retest = sum(
+            1 for r in rows_sorted if r.verification_state == "closed_without_retest"
+        )
+
         retest_section = ReportSection(
             heading="Retest & verification",
             summary=(
-                f"{with_retest} finding(s) have a linked retest scan. "
-                f"{status_summary.get('remediated', 0)} marked remediated; "
-                f"{status_summary.get('resolved', 0)} resolved; "
-                f"{status_summary.get('false_positive', 0)} false positive."
+                f"{with_retest} finding(s) have a linked retest scan; "
+                f"{closed_with_retest} closed with retest evidence; "
+                f"{closed_without_retest} closed without retest. "
+                f"{len(crit_high_open_no_retest)} active Critical/High still lack retest."
             ),
             metrics={
                 "with_retest_link": with_retest,
+                "closed_with_retest": closed_with_retest,
+                "closed_without_retest": closed_without_retest,
+                "active_crit_high_without_retest": len(crit_high_open_no_retest),
                 "remediated": status_summary.get("remediated", 0),
                 "resolved": status_summary.get("resolved", 0),
                 "false_positive": status_summary.get("false_positive", 0),
                 "accepted_risk": status_summary.get("accepted_risk", 0),
             },
+            tables=[
+                {
+                    "name": "verification_matrix",
+                    "columns": [
+                        "severity",
+                        "title",
+                        "status",
+                        "before",
+                        "after",
+                        "retest",
+                        "gap",
+                    ],
+                    "rows": [
+                        [
+                            v.severity.value,
+                            v.title,
+                            v.status.value,
+                            v.before,
+                            v.after,
+                            str(v.retest_scan_id)[:8] if v.retest_scan_id else "—",
+                            v.gap or "—",
+                        ]
+                        for v in verification_matrix[:40]
+                    ],
+                }
+            ],
             narrative=(
-                "Retest evidence should be reviewed before closing Critical/High items. "
-                "Auto-retest may run when status moves to remediated/resolved if enabled."
+                "Do not mark Critical/High as remediated for client delivery without a "
+                "linked retest scan. Before = first detection posture; After = current "
+                "status + verification state."
             ),
         )
+
+        if closed_without_retest or crit_high_open_no_retest:
+            export_warnings.append(
+                f"Verification gaps: {closed_without_retest} closed without retest; "
+                f"{len(crit_high_open_no_retest)} active Critical/High without retest link."
+            )
 
         remediation_highlights: list[str] = []
         for r in rows_sorted:
@@ -291,6 +401,7 @@ class EngagementReportService:
             "Validate false-positive dispositions with evidence before client delivery.",
             "Attach RoE and authorization letters when sharing this report externally.",
             "Re-scan remediated assets and confirm findings close via retest links.",
+            "Prefer imported real ZAP/OpenVAS reports or nuclei/nmap over mock engines.",
         ]
         if eng_type == "pt":
             recommendations.insert(
@@ -298,27 +409,86 @@ class EngagementReportService:
                 "Document manual validation steps and proof-of-concept notes "
                 "for confirmed PT findings.",
             )
+        if crit_high_open_no_retest:
+            recommendations.insert(
+                0,
+                f"Run Retest on {len(crit_high_open_no_retest)} active Critical/High "
+                "finding(s) before final client delivery.",
+            )
+
+        classification = "Confidential — Client Deliverable"
+        if delivery == "draft":
+            classification = "Internal Draft — Not for Client Delivery"
+        if allow_mock or mock_policy.get("mock_scan_count") or mock_policy.get(
+            "synthetic_finding_count"
+        ):
+            classification = "Internal — Lab / Not for Client Delivery"
+
+        dual_control = {
+            "required_for_client": True,
+            "delivery": delivery,
+            "approved": approval_row is not None,
+            "approval_id": str(approval_row.id) if approval_row else None,
+            "approved_by_id": (
+                str(approval_row.approved_by_id) if approval_row else None
+            ),
+            "approved_at": (
+                approval_row.approved_at.isoformat()
+                if approval_row and approval_row.approved_at
+                else None
+            ),
+        }
+        if delivery == "draft":
+            export_warnings.append(
+                "Draft delivery: dual-control approval not required; "
+                "do not send to client without admin/lead approval."
+            )
+
+        playbook = self._build_playbook(
+            scans=scans,
+            rows=rows_sorted,
+            eng_type=eng_type,
+            dual_control_approved=bool(approval_row),
+            delivery=delivery,
+        )
+        incomplete = [
+            k
+            for k, v in (playbook.metrics or {}).items()
+            if isinstance(v, bool) and v is False and k.endswith("_done")
+        ]
+        if incomplete and delivery == "client":
+            export_warnings.append(
+                "Playbook incomplete for client delivery: "
+                + ", ".join(incomplete)
+            )
 
         disclaimer = (
+            f"Classification: {classification}. Delivery={delivery}. "
             "This report is generated from NexuSec orchestration data. "
-            "Human review is required before client delivery. "
+            "Human review and dual-control approval are required before client delivery. "
             "Only authorized targets under a written Rules of Engagement (RoE) may be assessed."
         )
         if export_warnings:
-            disclaimer += " WARNING: This export was generated with allow_mock=true and may include lab/synthetic findings — not for client delivery."
+            disclaimer += " WARNINGS: " + " | ".join(export_warnings)
 
         report = EngagementReport(
             metadata=meta,
             engagement_type=eng_type,
+            classification=classification,
+            delivery=delivery,
+            dual_control=dual_control,
             executive_summary=exec_summary,
             scope=scope_section,
             methodology=methodology,
+            limitations=limitations,
+            playbook=playbook,
             severity_summary=severity_summary,
             status_summary=status_summary,
             scans=scan_infos,
             top_findings=rows_sorted[: max(1, min(top_n, 100))],
             findings=rows_sorted,
             remediation_highlights=remediation_highlights,
+            verification_matrix=verification_matrix,
             retest_summary=retest_section,
             recommendations=recommendations,
             disclaimer=disclaimer,
@@ -434,11 +604,174 @@ class EngagementReportService:
                     remediation_excerpt=_excerpt(v.remediation),
                     remediation_owner_label=v.remediation_owner_label,
                     last_retest_scan_id=v.last_retest_scan_id,
+                    verification_state=self._verification_state(v),
+                    evidence_excerpt=self._evidence_excerpt(v),
                     first_seen_at=v.first_seen_at,
                     last_seen_at=v.last_seen_at,
                 )
             )
         return rows
+
+    @staticmethod
+    def _verification_state(v: Vulnerability) -> str:
+        if v.status == FindingStatus.FALSE_POSITIVE:
+            return "false_positive"
+        closed = v.status in {
+            FindingStatus.REMEDIATED,
+            FindingStatus.RESOLVED,
+        }
+        if closed and v.last_retest_scan_id:
+            return "closed_with_retest"
+        if closed:
+            return "closed_without_retest"
+        if v.last_retest_scan_id:
+            return "retested"
+        return "unverified"
+
+    @staticmethod
+    def _evidence_excerpt(v: Vulnerability) -> Optional[str]:
+        evidence = v.evidence if isinstance(v.evidence, dict) else {}
+        for key in (
+            "request",
+            "response",
+            "proof",
+            "matched_at",
+            "param",
+            "url",
+            "plugin_output",
+            "snippet",
+        ):
+            val = evidence.get(key)
+            if isinstance(val, str) and val.strip():
+                return _excerpt(val, limit=200)
+            if val is not None and not isinstance(val, (dict, list)):
+                return _excerpt(str(val), limit=200)
+        if evidence:
+            return _excerpt(str(evidence), limit=200)
+        return _excerpt(v.description, limit=200)
+
+    @staticmethod
+    def _build_verification_matrix(
+        rows: list[EngagementFindingRow],
+    ) -> list[VerificationRow]:
+        matrix: list[VerificationRow] = []
+        for r in rows:
+            before = "detected"
+            after = f"{r.status.value} / {r.verification_state}"
+            gap: Optional[str] = None
+            if r.verification_state == "closed_without_retest":
+                gap = "closed without retest evidence"
+            elif (
+                r.severity in {Severity.CRITICAL, Severity.HIGH}
+                and r.status in ACTIVE_FINDING_STATUSES
+                and not r.last_retest_scan_id
+            ):
+                gap = "active Critical/High without retest"
+            elif r.verification_state == "unverified" and r.status in ACTIVE_FINDING_STATUSES:
+                gap = "no retest yet"
+            matrix.append(
+                VerificationRow(
+                    vulnerability_id=r.vulnerability_id,
+                    title=r.title,
+                    severity=r.severity,
+                    status=r.status,
+                    asset_name=r.asset_name,
+                    before=before,
+                    after=after,
+                    retest_scan_id=r.last_retest_scan_id,
+                    gap=gap,
+                )
+            )
+        # Surface gaps first, then by severity.
+        matrix.sort(
+            key=lambda x: (
+                0 if x.gap else 1,
+                _SEVERITY_ORDER.get(x.severity, 99),
+                x.title.lower(),
+            )
+        )
+        return matrix
+
+    @staticmethod
+    def _build_playbook(
+        *,
+        scans: list[Scan],
+        rows: list[EngagementFindingRow],
+        eng_type: str,
+        dual_control_approved: bool,
+        delivery: str,
+    ) -> ReportSection:
+        types = {
+            (
+                s.scan_type.value
+                if hasattr(s.scan_type, "value")
+                else str(s.scan_type)
+            )
+            for s in scans
+        }
+        discovery_done = "discovery" in types or any(
+            (
+                s.engine.value
+                if hasattr(s.engine, "value")
+                else str(s.engine)
+            )
+            == "nmap"
+            for s in scans
+        )
+        va_done = "va" in types or any(
+            (
+                s.engine.value
+                if hasattr(s.engine, "value")
+                else str(s.engine)
+            )
+            in {"nuclei", "openvas", "zap", "nexusec"}
+            for s in scans
+        )
+        confirmed = sum(1 for r in rows if r.status == FindingStatus.CONFIRMED)
+        remediated = sum(
+            1
+            for r in rows
+            if r.status in {FindingStatus.REMEDIATED, FindingStatus.RESOLVED}
+        )
+        retested = sum(1 for r in rows if r.last_retest_scan_id)
+        pt_validation_done = confirmed > 0 or eng_type != "pt"
+        steps_done = sum(
+            [
+                discovery_done,
+                va_done,
+                pt_validation_done,
+                remediated > 0 or not rows,
+                retested > 0 or remediated == 0,
+                dual_control_approved or delivery == "draft",
+            ]
+        )
+        return ReportSection(
+            heading="PT/VA playbook checklist",
+            summary=(
+                f"Playbook progress {steps_done}/6 — "
+                "Discovery → VA → manual PT confirm → remedi → retest → "
+                "dual-control approve → client PDF (+ compliance PDF)."
+            ),
+            metrics={
+                "discovery_done": discovery_done,
+                "va_done": va_done,
+                "pt_validation_done": pt_validation_done,
+                "confirmed_findings": confirmed,
+                "remediated_or_resolved": remediated,
+                "retested_findings": retested,
+                "dual_control_approved": dual_control_approved,
+                "delivery": delivery,
+                "steps_complete": steps_done,
+                "steps_total": 6,
+            },
+            narrative=(
+                "1) Discovery (nmap). 2) VA (nuclei/OpenVAS/ZAP import/nexusec). "
+                "3) Manual PT validation → status confirmed. "
+                "4) Remediation tracking. 5) Retest evidence on Critical/High. "
+                "6) Admin/lead dual-control approval, then client engagement PDF "
+                "and compliance PDF (PCI CDE-only when applicable)."
+            ),
+        )
 
     @staticmethod
     def _scan_info(scan: Scan) -> EngagementScanInfo:

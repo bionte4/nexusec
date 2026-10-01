@@ -99,6 +99,8 @@ def _vuln(
     severity: Severity = Severity.HIGH,
     status: FindingStatus = FindingStatus.OPEN,
     remediation: str | None = "Encode output; enable CSP.",
+    last_retest_scan_id: uuid.UUID | None = None,
+    evidence: dict | None = None,
 ) -> Vulnerability:
     now = datetime.now(timezone.utc)
     v = Vulnerability(
@@ -112,12 +114,13 @@ def _vuln(
         severity=severity,
         status=status,
         cwe_id="CWE-79",
-        evidence={},
+        evidence=evidence or {"url": "https://example.test/search?q=1"},
         mitre_attack_techniques=[],
         compliance_metadata={"iso_27001": ["A.8.8"]},
         raw_source={},
         source_tool="nuclei",
         remediation=remediation,
+        last_retest_scan_id=last_retest_scan_id,
         first_seen_at=now,
         last_seen_at=now,
         created_at=now,
@@ -140,13 +143,15 @@ def _service(
             _execute.n = 0  # type: ignore[attr-defined]
         _execute.n += 1  # type: ignore[attr-defined]
         n = _execute.n  # type: ignore[attr-defined]
+        # Default: no engagement approval row
+        result.scalar_one_or_none.return_value = None
         if n == 1:
             result.scalars.return_value.all.return_value = scans
         elif n == 2:
             result.scalars.return_value.all.return_value = vulns
         else:
+            # Extra loads (assets) or approval lookups
             result.scalars.return_value.all.return_value = assets
-            result.scalar_one_or_none.return_value = assets[0] if assets else None
         return result
 
     db.execute = AsyncMock(side_effect=_execute)
@@ -211,3 +216,57 @@ async def test_engagement_report_pt_recommendations() -> None:
     assert report.engagement_type == "pt"
     assert any("manual validation" in r.lower() for r in report.recommendations)
     assert "Penetration Testing" in report.metadata.title
+
+
+@pytest.mark.asyncio
+async def test_engagement_verification_matrix_and_classification() -> None:
+    user = _user()
+    org_id = user.organization_id
+    assert org_id is not None
+    asset = _asset(org_id)
+    scan = _scan(org_id, [asset], scan_type=ScanType.VA)
+    retest_id = uuid.uuid4()
+    vulns = [
+        _vuln(
+            org_id,
+            scan,
+            asset,
+            title="SQLi closed with retest",
+            severity=Severity.CRITICAL,
+            status=FindingStatus.REMEDIATED,
+            last_retest_scan_id=retest_id,
+        ),
+        _vuln(
+            org_id,
+            scan,
+            asset,
+            title="XSS closed without retest",
+            severity=Severity.HIGH,
+            status=FindingStatus.RESOLVED,
+        ),
+        _vuln(
+            org_id,
+            scan,
+            asset,
+            title="Open High no retest",
+            severity=Severity.HIGH,
+            status=FindingStatus.OPEN,
+        ),
+    ]
+    svc = _service([scan], vulns, [asset])
+    report = await svc.generate(user, scan_id=scan.id)
+
+    assert report.classification.startswith("Internal Draft")
+    assert report.limitations.heading.startswith("Limitations")
+    assert report.playbook.heading.startswith("PT/VA playbook")
+    assert report.verification_matrix
+    states = {r.verification_state for r in report.findings}
+    assert "closed_with_retest" in states
+    assert "closed_without_retest" in states
+    assert "unverified" in states
+    assert any(r.evidence_excerpt for r in report.findings)
+    assert report.retest_summary.metrics.get("closed_without_retest") == 1
+    assert any("Verification gaps" in w for w in report.export_warnings)
+    pdf = render_engagement_pdf(report)
+    assert pdf[:4] == b"%PDF"
+    assert len(pdf) > 500

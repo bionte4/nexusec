@@ -16,7 +16,7 @@ Di halaman **Scans**, bagian atas form menampilkan kartu engine siap pakai:
 | **Nuclei** | `nuclei` | Ready | VA · template-driven checks |
 | **NexuSec** | `nexusec` | Ready | VA · custom async scanner |
 | **OpenVAS** | `openvas` | Ready | VA · Greenbone GVM (mock / XML) |
-| **OWASP ZAP** | `zap` | Ready | DAST · web baseline (mock JSON) |
+| **OWASP ZAP** | `zap` | Ready | DAST · mock lab **atau** import JSON nyata |
 
 **Cara kerja di UI**
 
@@ -335,7 +335,7 @@ POST /api/v1/normalize/preview
 
 ### Tujuan
 
-DAST ringan untuk aset URL/HTTP. Default **mock** menghasilkan alert JSON gaya ZAP (XSS, missing headers, dll.) tanpa daemon `zaproxy`. Cocok lab/CI; import JSON ZAP nyata via `report_json` / Import raw.
+DAST ringan untuk aset URL/HTTP. Default **mock** menghasilkan alert JSON gaya ZAP (XSS, missing headers, dll.) tanpa daemon `zaproxy` — **lab/CI saja** (memblokir engagement export klien). Untuk delivery: **Import raw** `POST /api/v1/scans/import-report` dengan engine `zap` (JSON `site.alerts`), atau config `report_json` pada job.
 
 ### Config tipikal
 
@@ -382,7 +382,7 @@ Di UI Scans: pilih aset → pilih VA engine → **Start discovery → VA**.
 
 ### Import laporan
 
-`POST /api/v1/scans/import-report` menerima raw XML/JSONL/JSON, membuat scan `completed`, lalu ingest finding (batas 2MB).
+`POST /api/v1/scans/import-report` menerima raw XML/JSONL/JSON, membuat scan `completed`, lalu ingest finding (batas 2MB). Engine: `nmap`, `nuclei`, `nexusec`, `openvas`, **`zap`**. Import ditandai `config.imported=true` (+ `report_json`/`report_xml`) sehingga **tidak** dianggap mock.
 
 ---
 

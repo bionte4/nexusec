@@ -52,7 +52,7 @@ function downloadText(filename: string, content: string, mime: string) {
 }
 
 export function VulnerabilitiesPage() {
-  const { usingMock, setUsingMock, token } = useAuth()
+  const { usingMock, setUsingMock, token, isAdmin } = useAuth()
   const { t } = useLocale()
   const [searchParams, setSearchParams] = useSearchParams()
   const filterAssetId = searchParams.get('asset_id') || ''
@@ -444,13 +444,17 @@ export function VulnerabilitiesPage() {
     }
   }
 
-  async function exportEngagement(format: 'json' | 'pdf' = 'pdf') {
+  async function exportEngagement(
+    format: 'json' | 'pdf' = 'pdf',
+    delivery: 'draft' | 'client' = 'draft',
+  ) {
     setBusy(true)
     setNotice(null)
     setError(null)
     const scopeOpts = {
       ...(filterAssetId ? { asset_id: filterAssetId } : {}),
       ...(filterScanId ? { scan_id: filterScanId } : {}),
+      delivery,
     }
     try {
       if (usingMock || token === 'demo') {
@@ -459,10 +463,14 @@ export function VulnerabilitiesPage() {
       }
       if (format === 'pdf') {
         await api.downloadEngagementPdf(scopeOpts)
-        setNotice(t('vulns.engagementPdfExported'))
+        setNotice(
+          delivery === 'client'
+            ? t('vulns.engagementClientPdfExported')
+            : t('vulns.engagementPdfExported'),
+        )
       } else {
         const report = await api.getEngagementReport(scopeOpts)
-        const bits = ['nexusec-engagement']
+        const bits = ['nexusec-engagement', delivery]
         if (filterScanId) bits.push(`scan-${filterScanId.slice(0, 8)}`)
         if (filterAssetId) bits.push(`asset-${filterAssetId.slice(0, 8)}`)
         bits.push(new Date().toISOString().slice(0, 10))
@@ -482,6 +490,30 @@ export function VulnerabilitiesPage() {
     }
   }
 
+  async function approveEngagementDelivery() {
+    setBusy(true)
+    setNotice(null)
+    setError(null)
+    try {
+      if (usingMock || token === 'demo') {
+        setError(t('vulns.reportLiveRequired'))
+        return
+      }
+      await api.approveEngagement({
+        ...(filterAssetId ? { asset_id: filterAssetId } : {}),
+        ...(filterScanId ? { scan_id: filterScanId } : {}),
+        notes: 'Dual-control approval for client engagement delivery',
+      })
+      setNotice(t('vulns.engagementApproved'))
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : t('vulns.engagementApproveFailed'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -493,6 +525,9 @@ export function VulnerabilitiesPage() {
             {t('vulns.title')}
           </h1>
           <p className="mt-1 text-sm text-surface-400">{t('vulns.subtitle')}</p>
+          <p className="mt-1 max-w-xl text-[11px] text-surface-500">
+            {t('vulns.playbookHint')}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-1">
         <div className="flex flex-wrap gap-2">
@@ -508,7 +543,7 @@ export function VulnerabilitiesPage() {
           <button
             type="button"
             disabled={busy}
-            onClick={() => void exportEngagement('json')}
+            onClick={() => void exportEngagement('json', 'draft')}
             className="rounded-lg border border-accent/40 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
           >
             {t('vulns.engagementJson')}
@@ -516,10 +551,29 @@ export function VulnerabilitiesPage() {
           <button
             type="button"
             disabled={busy}
-            onClick={() => void exportEngagement('pdf')}
+            onClick={() => void exportEngagement('pdf', 'draft')}
             className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-semibold text-accent hover:bg-accent/20 disabled:opacity-50"
           >
             {t('vulns.engagementPdf')}
+          </button>
+          {isAdmin ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void approveEngagementDelivery()}
+              className="rounded-lg border border-emerald-500/40 px-3 py-2 text-xs font-medium text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-50"
+            >
+              {t('vulns.engagementApprove')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void exportEngagement('pdf', 'client')}
+            className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-50"
+            title={t('vulns.engagementClientHint')}
+          >
+            {t('vulns.engagementClientPdf')}
           </button>
           <button
             type="button"

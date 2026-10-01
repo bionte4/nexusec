@@ -138,8 +138,14 @@ const en = {
     presetNexusecName: 'VA (nexusec)',
     presetOpenvasName: 'VA (openvas)',
     presetZapName: 'DAST (OWASP ZAP)',
+    presetMockLabTitle:
+      'Lab/CI only — mock findings cannot be exported in client engagement reports',
+    mockLabWarningOpenvas:
+      'Mock OpenVAS is for lab/CI only and blocks client engagement export. Prefer GMP live or Import OpenVAS/GVM XML.',
+    mockLabWarningZap:
+      'Mock ZAP is for lab/CI only and blocks client engagement export. Prefer Import real ZAP JSON (site.alerts).',
     openvasMode: 'OpenVAS mode',
-    openvasModeMock: 'mock — synthetic GVM report (lab/CI)',
+    openvasModeMock: 'mock — synthetic GVM report (lab/CI only)',
     openvasModeGmp: 'gmp — live Greenbone (set GVM_* in .env)',
     openvasModeHint:
       'Needs GVM_USERNAME/PASSWORD and GVM_SOCKET or GVM_HOST. See docs/greenbone-gvm.md. Default follows OPENVAS_MODE.',
@@ -150,9 +156,9 @@ const en = {
     openvasCatalogHint:
       'Synthetic findings for web / DB / app servers without credentials. Ignored in gmp mode when live GVM is configured.',
     zapMode: 'ZAP mode',
-    zapModeMock: 'mock — synthetic ZAP JSON alerts (lab/CI)',
+    zapModeMock: 'mock — synthetic ZAP JSON alerts (lab/CI only)',
     zapModeHint:
-      'Mock DAST alerts without a live ZAP daemon. Import real ZAP JSON via Import raw.',
+      'Mock DAST alerts without a live ZAP daemon — not for client delivery. Import real ZAP JSON via Import scanner report below.',
     zapPolicy: 'ZAP policy',
     authenticatedVa: 'Authenticated VA (credentialed)',
     roeAck:
@@ -179,6 +185,8 @@ const en = {
     importTitle: 'Import scanner report',
     importHint:
       'Paste raw nmap XML, nuclei JSONL, nexusec JSON, OpenVAS/GVM XML, or ZAP JSON. Findings are normalized and ingested immediately.',
+    importPreferredPath:
+      'Preferred production path for ZAP/OpenVAS: import real scanner reports here (not mock presets). Imported evidence is eligible for client engagement PDF.',
     importRawPlaceholder: 'Paste raw scanner output here…',
     importSubmit: 'Import & ingest',
     importDefaultName: 'Imported report',
@@ -273,11 +281,20 @@ const en = {
     reportScopeHint: 'Exports follow the active asset scope when set via Assets or ?asset_id=.',
     reportFailed: 'Compliance report export failed',
     reportLiveRequired: 'Compliance reports require a live API session.',
-    engagementJson: 'Engagement JSON',
-    engagementPdf: 'Engagement PDF',
-    engagementExported: 'Downloaded VA/PT engagement report (JSON).',
-    engagementPdfExported: 'Downloaded VA/PT engagement report (PDF).',
+    engagementJson: 'Draft JSON',
+    engagementPdf: 'Draft PDF',
+    engagementClientPdf: 'Client PDF',
+    engagementApprove: 'Approve client',
+    engagementApproved: 'Engagement scope approved for client delivery (dual control).',
+    engagementApproveFailed: 'Failed to approve engagement delivery',
+    engagementClientHint:
+      'Requires admin/lead dual-control approval for the current scan/asset scope.',
+    engagementExported: 'Downloaded VA/PT engagement draft (JSON).',
+    engagementPdfExported: 'Downloaded VA/PT engagement draft (PDF).',
+    engagementClientPdfExported: 'Downloaded client engagement PDF.',
     engagementFailed: 'Engagement report export failed',
+    playbookHint:
+      'Playbook: Discovery → VA → confirm → remedi → retest → approve → Client PDF (+ PCI CDE).',
     colSeverity: 'Severity',
     colTitle: 'Title',
     colStatus: 'Status',
@@ -600,8 +617,14 @@ const id: Messages = {
     presetNexusecName: 'VA (nexusec)',
     presetOpenvasName: 'VA (openvas)',
     presetZapName: 'DAST (OWASP ZAP)',
+    presetMockLabTitle:
+      'Hanya lab/CI — finding mock tidak bisa diekspor ke laporan engagement klien',
+    mockLabWarningOpenvas:
+      'Mock OpenVAS hanya untuk lab/CI dan memblokir export engagement klien. Prefer GMP live atau Impor XML OpenVAS/GVM.',
+    mockLabWarningZap:
+      'Mock ZAP hanya untuk lab/CI dan memblokir export engagement klien. Prefer Impor JSON ZAP nyata (site.alerts).',
     openvasMode: 'Mode OpenVAS',
-    openvasModeMock: 'mock — laporan GVM sintetis (lab/CI)',
+    openvasModeMock: 'mock — laporan GVM sintetis (lab/CI saja)',
     openvasModeGmp: 'gmp — Greenbone live (isi GVM_* di .env)',
     openvasModeHint:
       'Perlu GVM_USERNAME/PASSWORD dan GVM_SOCKET atau GVM_HOST. Lihat docs/greenbone-gvm.md.',
@@ -612,9 +635,9 @@ const id: Messages = {
     openvasCatalogHint:
       'Finding sintetis untuk web / DB / app server tanpa kredensial. Diabaikan di mode gmp bila GVM live terkonfigurasi.',
     zapMode: 'Mode ZAP',
-    zapModeMock: 'mock — alert ZAP JSON sintetis (lab/CI)',
+    zapModeMock: 'mock — alert ZAP JSON sintetis (lab/CI saja)',
     zapModeHint:
-      'Alert DAST mock tanpa daemon ZAP live. Impor JSON ZAP nyata lewat Import raw.',
+      'Alert DAST mock tanpa daemon ZAP live — bukan untuk delivery klien. Impor JSON ZAP nyata lewat Impor laporan scanner di bawah.',
     zapPolicy: 'Kebijakan ZAP',
     authenticatedVa: 'VA terautentikasi (berkredensial)',
     roeAck:
@@ -642,6 +665,8 @@ const id: Messages = {
     importTitle: 'Impor laporan scanner',
     importHint:
       'Tempel output mentah nmap XML, nuclei JSONL, nexusec JSON, OpenVAS/GVM XML, atau ZAP JSON. Finding dinormalisasi dan diingest langsung.',
+    importPreferredPath:
+      'Jalur produksi yang disarankan untuk ZAP/OpenVAS: impor laporan scanner nyata di sini (bukan preset mock). Bukti impor memenuhi syarat PDF engagement klien.',
     importRawPlaceholder: 'Tempel output mentah scanner di sini…',
     importSubmit: 'Impor & ingest',
     importDefaultName: 'Laporan diimpor',
@@ -737,11 +762,21 @@ const id: Messages = {
       'Ekspor mengikuti filter aset aktif (dari Assets atau ?asset_id=).',
     reportFailed: 'Ekspor laporan kepatuhan gagal',
     reportLiveRequired: 'Laporan kepatuhan memerlukan sesi API aktif.',
-    engagementJson: 'Engagement JSON',
-    engagementPdf: 'Engagement PDF',
-    engagementExported: 'Laporan engagement VA/PT (JSON) diunduh.',
-    engagementPdfExported: 'Laporan engagement VA/PT (PDF) diunduh.',
+    engagementJson: 'Draft JSON',
+    engagementPdf: 'Draft PDF',
+    engagementClientPdf: 'PDF Klien',
+    engagementApprove: 'Setujui klien',
+    engagementApproved:
+      'Scope engagement disetujui untuk delivery klien (dual control).',
+    engagementApproveFailed: 'Gagal menyetujui delivery engagement',
+    engagementClientHint:
+      'Memerlukan persetujuan dual-control admin/lead untuk scope scan/aset aktif.',
+    engagementExported: 'Draft engagement VA/PT (JSON) diunduh.',
+    engagementPdfExported: 'Draft engagement VA/PT (PDF) diunduh.',
+    engagementClientPdfExported: 'PDF engagement klien diunduh.',
     engagementFailed: 'Ekspor laporan engagement gagal',
+    playbookHint:
+      'Playbook: Discovery → VA → confirm → remedi → retest → approve → PDF Klien (+ PCI CDE).',
     colSeverity: 'Keparahan',
     colTitle: 'Judul',
     colStatus: 'Status',

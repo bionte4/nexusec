@@ -460,27 +460,47 @@ UI: **SOC Chat** — tanya dalam bahasa natural, contoh:
 
 ### 8.0 Engagement report (hasil VA/PT ke klien)
 
-Laporan engagement berisi cover/metadata, scope + RoE notes, metodologi, ringkasan severity/status, daftar scan, top findings, highlight remedi, dan ringkasan retest.
+Laporan engagement berisi cover/metadata, **classification**, scope + RoE notes, metodologi, **limitations**, ringkasan severity/status, daftar scan, top findings (dengan verification state), highlight remedi, **verification matrix (before → after)**, dan ringkasan retest.
 
 **Gate keamanan (P0)**
 - Scan enqueue **wajib** `config.roe_acknowledged=true` (atau `lab_mode=true` hanya di non-production).
 - Export engagement **diblok** jika ada finding sintetis / job ZAP·OpenVAS mock. Override lab: `allow_mock=true` (bukan untuk klien).
 - Aksi `scan.enqueue` dan `report.engagement.export` dicatat di audit log.
 
+**Kualitas VA/PT (P2)**
+- Prefer **Import ZAP JSON / OpenVAS XML** (atau nmap/nuclei live) — mock ZAP/OpenVAS = lab saja dan memblokir export klien.
+- PDF menampilkan classification, limitations, dan verification matrix (gap Critical/High tanpa retest).
+- Finding closed tanpa `last_retest_scan_id` muncul sebagai gap di matrix.
+
+**Proses pentest (P3)**
+- Playbook checklist di engagement report: Discovery → VA → confirm → remedi → retest → dual-control → Client PDF.
+- Dual control: Admin **Approve client** lalu **Client PDF** (`delivery=client`). Draft JSON/PDF tidak perlu approval.
+- PCI-DSS report default **`cde_only=true`** — hanya aset `is_cde_scope`.
+
 **UI**
-- **Scans** → centang RoE sebelum create/pipeline; tombol **Engagement PDF** per scan
-- **Vulnerabilities** → **Engagement JSON / Engagement PDF** (mengikuti filter `scan_id` / `asset_id` aktif)
+- **Scans** → centang RoE sebelum create/pipeline; peringatan mock pada ZAP/OpenVAS; tombol **Engagement PDF** per scan
+- **Vulnerabilities** → Draft JSON/PDF, **Approve client** (admin), **Client PDF**; PCI CDE-only
 
 **API**
 
 ```bash
-# Seluruh org (atau filter)
-curl -s -H "$AUTH" "$API/api/v1/reports/engagement" | python3 -m json.tool
-curl -s -H "$AUTH" "$API/api/v1/reports/engagement?scan_id=$SCAN_ID" -o engagement.json
-curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID" -o engagement.pdf
+# Draft internal (default)
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement?scan_id=$SCAN_ID" | python3 -m json.tool
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID&delivery=draft" -o engagement-draft.pdf
+
+# Dual control (admin) lalu client PDF
+curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
+  "$API/api/v1/reports/engagement/approve" \
+  -d "{\"scan_id\":\"$SCAN_ID\",\"notes\":\"Lead sign-off\"}"
+curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID&delivery=client" -o engagement-client.pdf
+
 # Lab only:
 curl -s -H "$AUTH" "$API/api/v1/reports/engagement/pdf?scan_id=$SCAN_ID&allow_mock=true" -o engagement-lab.pdf
 curl -s -H "$AUTH" "$API/api/v1/reports/engagement?engagement_type=pt&asset_id=$ASSET_ID" | python3 -m json.tool
+
+# PCI CDE-only (default)
+curl -s -H "$AUTH" "$API/api/v1/reports/pci-dss" | python3 -m json.tool
+curl -s -H "$AUTH" "$API/api/v1/reports/pci-dss?cde_only=false" | python3 -m json.tool
 ```
 
 Review manusia wajib sebelum kirim ke klien. Lampirkan RoE tertulis.

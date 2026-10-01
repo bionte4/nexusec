@@ -49,6 +49,9 @@ def assert_roe_for_scan(
 def is_mock_scan_config(engine: ScannerEngine | str, config: dict[str, Any] | None) -> bool:
     cfg = config if isinstance(config, dict) else {}
     eng = engine.value if isinstance(engine, ScannerEngine) else str(engine).lower()
+    # Real imported reports are never treated as mock connector jobs.
+    if cfg.get("imported") is True:
+        return False
     if eng == "zap":
         mode = str(cfg.get("zap_mode") or cfg.get("mode") or "mock").lower()
         if isinstance(cfg.get("report_json"), str) and cfg["report_json"].strip():

@@ -213,21 +213,30 @@ class ComplianceReportService:
         auditor: User,
         *,
         asset_id: Optional[uuid.UUID] = None,
+        cde_only: bool = True,
     ) -> ComplianceReport:
         vulns, assets = await self._load_scope(asset_id=asset_id)
-        cde_asset_ids = {a.id for a in assets if a.is_cde_scope}
-        # PCI focus: Req 11 + anything on CDE assets
+        cde_assets = [a for a in assets if a.is_cde_scope]
+        cde_asset_ids = {a.id for a in cde_assets}
         rows_all = self._to_rows(vulns, control_keys=("pci_dss", "pci"))
-        rows = [
-            r
-            for r in rows_all
-            if r.is_cde_scope
-            or any(c.startswith("11.") or c.startswith("6.") for c in r.controls)
-            or not r.controls  # include untagged but will default to 11.3.1 in buckets
-        ]
-        # Prefer CDE findings first; if empty, use all with PCI default mapping
-        if not any(r.is_cde_scope for r in rows):
-            rows = rows_all
+
+        if cde_only:
+            # PCI gate: inventory CDE scope is authoritative.
+            assets = cde_assets
+            rows = [r for r in rows_all if r.is_cde_scope]
+            if asset_id is not None and asset_id not in cde_asset_ids:
+                rows = []
+                assets = []
+        else:
+            rows = [
+                r
+                for r in rows_all
+                if r.is_cde_scope
+                or any(c.startswith("11.") or c.startswith("6.") for c in r.controls)
+                or not r.controls
+            ]
+            if not any(r.is_cde_scope for r in rows):
+                rows = rows_all
 
         buckets = self._bucket_by_control(
             rows,
@@ -237,6 +246,15 @@ class ComplianceReportService:
         )
         active = [r for r in rows if r.status in ACTIVE_FINDING_STATUSES]
         cde_active = [r for r in active if r.is_cde_scope]
+        scope_note = (
+            f"CDE-only={cde_only}. CDE assets in inventory: {len(cde_asset_ids)}. "
+            "PCI DSS reports default to Cardholder Data Environment assets only."
+        )
+        if cde_only and not cde_asset_ids:
+            scope_note += (
+                " WARNING: No assets flagged is_cde_scope — mark CDE inventory "
+                "before QSA sampling."
+            )
         meta = self._metadata(
             auditor,
             report_type="pci_dss",
@@ -245,8 +263,7 @@ class ComplianceReportService:
             assets=assets,
             active_count=len(active),
             scope_notes=self._scope_notes(
-                f"CDE assets in inventory: {len(cde_asset_ids)}. "
-                "Focus on Req 11 vulnerability scanning and CDE exposure.",
+                scope_note,
                 assets=assets,
                 asset_id=asset_id,
             ),
@@ -256,13 +273,17 @@ class ComplianceReportService:
             ReportSection(
                 heading="Req 11 posture",
                 summary=(
-                    f"{len(active)} active findings in PCI-relevant scope; "
-                    f"{len(cde_active)} on CDE-flagged assets."
+                    f"{len(active)} active findings in PCI CDE scope; "
+                    f"{len(cde_active)} on CDE-flagged assets. "
+                    f"cde_only={cde_only}."
                 ),
                 metrics={
+                    "cde_only": cde_only,
                     "cde_assets": len(cde_asset_ids),
                     "cde_active_findings": len(cde_active),
-                    "req_11_controls": len([b for b in buckets if b.control_id.startswith("11.")]),
+                    "req_11_controls": len(
+                        [b for b in buckets if b.control_id.startswith("11.")]
+                    ),
                     "severity": _severity_summary(active),
                 },
             ),
@@ -293,21 +314,29 @@ class ComplianceReportService:
                 ],
                 narrative=(
                     "PCI DSS Req 11.3 requires authenticated internal vulnerability scans "
-                    "and remediation of high-risk issues in the CDE."
+                    "and remediation of high-risk issues in the CDE. Non-CDE assets are "
+                    "excluded when cde_only=true."
                 ),
             ),
         ]
+        recommendations = [
+            "Ensure quarterly internal scans cover all CDE and connected systems (11.3.1).",
+            "Track remediation of Critical/High on CDE to closure before ASV cycles.",
+            "Confirm scan authentication and coverage evidence for QSA sampling.",
+        ]
+        if cde_only and not cde_asset_ids:
+            recommendations.insert(
+                0,
+                "Flag Cardholder Data Environment assets with is_cde_scope=true "
+                "in inventory before relying on this PCI report.",
+            )
         return ComplianceReport(
             metadata=meta,
             executive_summary=sections[0].summary,
             sections=sections,
             control_mapping=buckets,
             findings=rows,
-            recommendations=[
-                "Ensure quarterly internal scans cover all CDE and connected systems (11.3.1).",
-                "Track remediation of Critical/High on CDE to closure before ASV cycles.",
-                "Confirm scan authentication and coverage evidence for QSA sampling.",
-            ],
+            recommendations=recommendations,
         )
 
     async def generate_gdpr(

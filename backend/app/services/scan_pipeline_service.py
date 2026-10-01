@@ -203,6 +203,7 @@ class ScanImportService:
             ScannerEngine.NUCLEI,
             ScannerEngine.NEXUSEC,
             ScannerEngine.OPENVAS,
+            ScannerEngine.ZAP,
         }:
             raise ScanValidationError(f"Import not supported for engine {engine.value}")
 
@@ -230,8 +231,26 @@ class ScanImportService:
             if engine in {ScannerEngine.NMAP, ScannerEngine.OPENVAS}
             else "stdout_jsonl"
             if engine == ScannerEngine.NUCLEI
+            else "stdout_json"
+            if engine == ScannerEngine.ZAP
             else "raw"
         )
+        import_config: dict[str, Any] = {
+            "imported": True,
+            "last_result": {
+                "engine": engine.value,
+                result_key: raw,
+                "finished_at": now.isoformat(),
+                "command": ["import", engine.value],
+            },
+        }
+        # Preserve real-report markers so mock-policy treats imports as evidence.
+        if engine == ScannerEngine.ZAP:
+            import_config["report_json"] = raw
+            import_config["zap_mode"] = "import"
+        elif engine == ScannerEngine.OPENVAS:
+            import_config["report_xml"] = raw
+            import_config["openvas_mode"] = "import"
         scan = Scan(
             organization_id=organization_id,
             name=(name or f"Import ({engine.value})").strip()[:255],
@@ -239,15 +258,7 @@ class ScanImportService:
             engine=engine,
             status=ScanStatus.COMPLETED,
             progress=100.0,
-            config={
-                "imported": True,
-                "last_result": {
-                    "engine": engine.value,
-                    result_key: raw,
-                    "finished_at": now.isoformat(),
-                    "command": ["import", engine.value],
-                },
-            },
+            config=import_config,
             created_by_id=created_by_id,
             started_at=now,
             completed_at=now,

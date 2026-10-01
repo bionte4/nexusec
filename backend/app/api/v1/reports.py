@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,6 +16,10 @@ from app.schemas.reports import ComplianceReport, EngagementReport
 from app.services.backfill_service import BackfillService
 from app.services.compliance_pdf import render_compliance_pdf
 from app.services.compliance_report_service import ComplianceReportService
+from app.services.engagement_approval_service import (
+    EngagementApprovalError,
+    EngagementApprovalService,
+)
 from app.services.engagement_pdf import render_engagement_pdf
 from app.services.engagement_report_service import EngagementReportService
 from app.services.scan_policy import EngagementExportBlocked
@@ -21,6 +27,15 @@ from app.services.scan_policy import EngagementExportBlocked
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 _REPORT_KINDS = ("iso27001", "pci-dss", "gdpr", "nist-csf")
+
+
+class EngagementApproveRequest(BaseModel):
+    scan_id: Optional[uuid.UUID] = None
+    asset_id: Optional[uuid.UUID] = None
+    engagement_type: Optional[str] = Field(
+        default=None, pattern="^(va|pt|discovery|compliance|custom)$"
+    )
+    notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 def get_report_service(db: AsyncSession = Depends(get_db)) -> ComplianceReportService:
@@ -33,17 +48,26 @@ def get_engagement_service(
     return EngagementReportService(db)
 
 
+def get_approval_service(
+    db: AsyncSession = Depends(get_db),
+) -> EngagementApprovalService:
+    return EngagementApprovalService(db)
+
+
 async def _generate(
     kind: str,
     current_user: RequireSocOrAbove,
     service: ComplianceReportService,
     *,
     asset_id: uuid.UUID | None = None,
+    cde_only: bool = True,
 ) -> ComplianceReport:
     if kind == "iso27001":
         return await service.generate_iso27001(current_user, asset_id=asset_id)
     if kind == "pci-dss":
-        return await service.generate_pci_dss(current_user, asset_id=asset_id)
+        return await service.generate_pci_dss(
+            current_user, asset_id=asset_id, cde_only=cde_only
+        )
     if kind == "gdpr":
         return await service.generate_gdpr(current_user, asset_id=asset_id)
     if kind == "nist-csf":
@@ -74,6 +98,11 @@ async def engagement_report(
         False,
         description="Allow lab/synthetic findings (not for client delivery)",
     ),
+    delivery: str = Query(
+        "draft",
+        pattern="^(draft|client)$",
+        description="draft = internal; client = requires dual-control approval",
+    ),
     service: EngagementReportService = Depends(get_engagement_service),
 ) -> EngagementReport:
     try:
@@ -84,6 +113,7 @@ async def engagement_report(
             engagement_type=engagement_type,
             top_n=top_n,
             allow_mock=allow_mock,
+            delivery=delivery,
         )
     except EngagementExportBlocked as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -109,6 +139,11 @@ async def engagement_report_pdf(
         False,
         description="Allow lab/synthetic findings (not for client delivery)",
     ),
+    delivery: str = Query(
+        "draft",
+        pattern="^(draft|client)$",
+        description="draft = internal; client = requires dual-control approval",
+    ),
     service: EngagementReportService = Depends(get_engagement_service),
 ) -> Response:
     try:
@@ -119,13 +154,14 @@ async def engagement_report_pdf(
             engagement_type=engagement_type,
             top_n=top_n,
             allow_mock=allow_mock,
+            delivery=delivery,
         )
     except EngagementExportBlocked as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     pdf_bytes = render_engagement_pdf(report)
-    parts = ["nexusec-engagement", report.engagement_type]
+    parts = ["nexusec-engagement", report.engagement_type, delivery]
     if scan_id:
         parts.append(f"scan-{str(scan_id)[:8]}")
     if asset_id:
@@ -139,6 +175,77 @@ async def engagement_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get(
+    "/engagement/approval",
+    summary="Check dual-control approval status for engagement scope",
+)
+async def engagement_approval_status(
+    current_user: RequireSocOrAbove,
+    tenant: RequireTenant,
+    scan_id: uuid.UUID | None = Query(None),
+    asset_id: uuid.UUID | None = Query(None),
+    engagement_type: str | None = Query(
+        None, pattern="^(va|pt|discovery|compliance|custom)$"
+    ),
+    service: EngagementApprovalService = Depends(get_approval_service),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    return await service.status(
+        organization_id=org_id,
+        scan_id=scan_id,
+        asset_id=asset_id,
+        engagement_type=engagement_type,
+    )
+
+
+@router.post(
+    "/engagement/approve",
+    status_code=201,
+    summary="Admin/lead dual-control approval for client engagement delivery",
+)
+async def engagement_approve(
+    payload: EngagementApproveRequest,
+    current_user: RequireAdmin,
+    tenant: RequireTenant,
+    service: EngagementApprovalService = Depends(get_approval_service),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    try:
+        return await service.approve(
+            current_user,
+            organization_id=org_id,
+            scan_id=payload.scan_id,
+            asset_id=payload.asset_id,
+            engagement_type=payload.engagement_type,
+            notes=payload.notes,
+        )
+    except EngagementApprovalError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post(
+    "/engagement/revoke-approval",
+    summary="Revoke dual-control approval for engagement scope",
+)
+async def engagement_revoke_approval(
+    payload: EngagementApproveRequest,
+    current_user: RequireAdmin,
+    tenant: RequireTenant,
+    service: EngagementApprovalService = Depends(get_approval_service),
+) -> dict[str, Any]:
+    org_id = tenant.require_organization_id()
+    try:
+        return await service.revoke(
+            current_user,
+            organization_id=org_id,
+            scan_id=payload.scan_id,
+            asset_id=payload.asset_id,
+            engagement_type=payload.engagement_type,
+        )
+    except EngagementApprovalError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(
@@ -166,9 +273,15 @@ async def pci_dss_report(
     asset_id: uuid.UUID | None = Query(
         None, description="Limit report to findings for this asset"
     ),
+    cde_only: bool = Query(
+        True,
+        description="Restrict findings to CDE-scoped assets (PCI inventory gate)",
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> ComplianceReport:
-    return await service.generate_pci_dss(current_user, asset_id=asset_id)
+    return await service.generate_pci_dss(
+        current_user, asset_id=asset_id, cde_only=cde_only
+    )
 
 
 @router.get(
@@ -212,6 +325,10 @@ async def compliance_report_pdf(
     asset_id: uuid.UUID | None = Query(
         None, description="Limit report to findings for this asset"
     ),
+    cde_only: bool = Query(
+        True,
+        description="PCI-DSS only: restrict findings to CDE-scoped assets",
+    ),
     service: ComplianceReportService = Depends(get_report_service),
 ) -> Response:
     if kind not in _REPORT_KINDS:
@@ -219,11 +336,15 @@ async def compliance_report_pdf(
             status_code=404,
             detail=f"Unknown report kind. Expected one of: {', '.join(_REPORT_KINDS)}",
         )
-    report = await _generate(kind, current_user, service, asset_id=asset_id)
+    report = await _generate(
+        kind, current_user, service, asset_id=asset_id, cde_only=cde_only
+    )
     pdf_bytes = render_compliance_pdf(report)
     suffix = f"-asset-{str(asset_id)[:8]}" if asset_id else ""
+    cde_suffix = "-cde" if kind == "pci-dss" and cde_only else ""
     filename = (
-        f"nexusec-{kind}{suffix}-{report.metadata.generated_at.date().isoformat()}.pdf"
+        f"nexusec-{kind}{cde_suffix}{suffix}-"
+        f"{report.metadata.generated_at.date().isoformat()}.pdf"
     )
     return Response(
         content=pdf_bytes,
@@ -265,7 +386,10 @@ async def list_report_types(_: RequireSocOrAbove) -> dict[str, list[dict[str, st
                 "path": "/api/v1/reports/engagement",
                 "pdf": "/api/v1/reports/engagement/pdf",
                 "standard": "NexuSec VA/PT Engagement",
-                "query": "scan_id, asset_id, engagement_type (optional)",
+                "query": (
+                    "scan_id, asset_id, engagement_type, delivery=draft|client, "
+                    "approve via POST /engagement/approve"
+                ),
             },
             {
                 "id": "iso27001",
@@ -279,7 +403,7 @@ async def list_report_types(_: RequireSocOrAbove) -> dict[str, list[dict[str, st
                 "path": "/api/v1/reports/pci-dss",
                 "pdf": "/api/v1/reports/pci-dss/pdf",
                 "standard": "PCI DSS v4.0 Requirement 11",
-                "query": "asset_id (optional UUID)",
+                "query": "asset_id (optional), cde_only=true (default)",
             },
             {
                 "id": "gdpr",

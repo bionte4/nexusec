@@ -43,13 +43,13 @@ const ENGINES: { id: ScannerEngine; ready: boolean; label: string; blurb: string
     id: 'openvas',
     ready: true,
     label: 'OpenVAS',
-    blurb: 'VA · Greenbone GVM (mock / XML)',
+    blurb: 'VA · GVM live / import XML (mock = lab only)',
   },
   {
     id: 'zap',
     ready: true,
     label: 'OWASP ZAP',
-    blurb: 'DAST · web app baseline (mock JSON)',
+    blurb: 'DAST · import real ZAP JSON (mock = lab only)',
   },
   { id: 'other', ready: false, label: 'Other', blurb: 'Coming soon' },
 ]
@@ -739,6 +739,7 @@ export function ScansPage() {
                 type="button"
                 onClick={() => applyPreset('va_openvas')}
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                title={t('scans.presetMockLabTitle')}
               >
                 {t('scans.presetOpenvas')}
               </button>
@@ -746,6 +747,7 @@ export function ScansPage() {
                 type="button"
                 onClick={() => applyPreset('va_zap')}
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
+                title={t('scans.presetMockLabTitle')}
               >
                 {t('scans.presetZap')}
               </button>
@@ -840,6 +842,9 @@ export function ScansPage() {
             </div>
             {form.engine === 'openvas' ? (
               <div className="space-y-2">
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+                  {t('scans.mockLabWarningOpenvas')}
+                </p>
                 <div className="space-y-1">
                   <label className="text-[11px] text-surface-400">
                     {t('scans.openvasMode')}
@@ -915,6 +920,9 @@ export function ScansPage() {
             ) : null}
             {form.engine === 'zap' ? (
               <div className="space-y-2">
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+                  {t('scans.mockLabWarningZap')}
+                </p>
                 <div className="space-y-1">
                   <label className="text-[11px] text-surface-400">
                     {t('scans.zapMode')}
@@ -1342,6 +1350,9 @@ export function ScansPage() {
         <section className="panel space-y-3 rounded-xl p-5">
           <h2 className="text-sm font-medium">{t('scans.importTitle')}</h2>
           <p className="text-xs text-surface-400">{t('scans.importHint')}</p>
+          <p className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2 py-1.5 text-[11px] text-emerald-100">
+            {t('scans.importPreferredPath')}
+          </p>
           <form onSubmit={onImportReport} className="grid gap-3 md:grid-cols-2">
             <input
               value={importForm.name}

@@ -64,6 +64,7 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
     story.append(Paragraph(_esc(meta.title), title_style))
     story.append(
         Paragraph(
+            f"<b>Classification:</b> {_esc(report.classification)}<br/>"
             f"<b>Type:</b> {_esc(report.engagement_type.upper())} &nbsp;|&nbsp; "
             f"<b>Standard:</b> {_esc(meta.standard)}<br/>"
             f"<b>Generated:</b> {_esc(meta.generated_at.isoformat())}<br/>"
@@ -76,6 +77,18 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
     )
     if meta.scope_notes:
         story.append(Paragraph(_esc(meta.scope_notes), small))
+    if report.export_warnings:
+        for warn in report.export_warnings[:5]:
+            story.append(
+                Paragraph(
+                    f"<b>WARNING:</b> {_esc(warn)}",
+                    ParagraphStyle(
+                        "EngWarn",
+                        parent=small,
+                        textColor=colors.HexColor("#b45309"),
+                    ),
+                )
+            )
     story.append(Spacer(1, 6))
 
     story.append(Paragraph("Executive summary", h2))
@@ -95,6 +108,30 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
     story.append(Paragraph(_esc(report.methodology.summary), body))
     if report.methodology.narrative:
         story.append(Paragraph(_esc(report.methodology.narrative), body))
+
+    story.append(Paragraph(_esc(report.limitations.heading), h2))
+    story.append(Paragraph(_esc(report.limitations.summary), body))
+    if report.limitations.narrative:
+        story.append(Paragraph(_esc(report.limitations.narrative), small))
+
+    story.append(Paragraph(_esc(report.playbook.heading), h2))
+    story.append(Paragraph(_esc(report.playbook.summary), body))
+    if report.playbook.narrative:
+        story.append(Paragraph(_esc(report.playbook.narrative), small))
+    if report.playbook.metrics:
+        rows = [["Step", "Status"]]
+        for key, value in list(report.playbook.metrics.items())[:12]:
+            rows.append([_esc(str(key)), _esc(_fmt(value))])
+        story.append(_table(rows, col_widths=[70 * mm, 100 * mm]))
+    if report.dual_control:
+        story.append(
+            Paragraph(
+                f"<b>Dual control:</b> approved="
+                f"{_esc(str(report.dual_control.get('approved')))} · "
+                f"delivery={_esc(str(report.delivery))}",
+                small,
+            )
+        )
 
     story.append(Paragraph("Severity & status summary", h2))
     sev_rows = [["Severity", "Count"]]
@@ -125,7 +162,7 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
 
     if report.top_findings:
         story.append(Paragraph("Top findings", h2))
-        rows = [["Sev", "Status", "Asset", "Title", "CWE/CVE"]]
+        rows = [["Sev", "Status", "Verify", "Asset", "Title"]]
         for finding in report.top_findings[:40]:
             sev = (
                 finding.severity.value
@@ -137,18 +174,17 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
                 if hasattr(finding.status, "value")
                 else str(finding.status)
             )
-            ids = ", ".join(x for x in [finding.cwe_id, finding.cve_id] if x) or "—"
             rows.append(
                 [
                     _esc(sev),
                     _esc(status),
-                    _esc(finding.asset_name)[:22],
-                    _esc(finding.title)[:42],
-                    _esc(ids)[:28],
+                    _esc(finding.verification_state)[:18],
+                    _esc(finding.asset_name)[:20],
+                    _esc(finding.title)[:40],
                 ]
             )
         story.append(
-            _table(rows, col_widths=[18 * mm, 24 * mm, 32 * mm, 55 * mm, 35 * mm])
+            _table(rows, col_widths=[16 * mm, 22 * mm, 28 * mm, 30 * mm, 58 * mm])
         )
 
     if report.remediation_highlights:
@@ -160,6 +196,28 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
     story.append(Paragraph(_esc(report.retest_summary.summary), body))
     if report.retest_summary.narrative:
         story.append(Paragraph(_esc(report.retest_summary.narrative), small))
+
+    if report.verification_matrix:
+        story.append(Paragraph("Verification matrix (before → after)", h2))
+        rows = [["Sev", "Title", "Before", "After", "Gap"]]
+        for row in report.verification_matrix[:35]:
+            sev = (
+                row.severity.value
+                if hasattr(row.severity, "value")
+                else str(row.severity)
+            )
+            rows.append(
+                [
+                    _esc(sev),
+                    _esc(row.title)[:36],
+                    _esc(row.before)[:16],
+                    _esc(row.after)[:28],
+                    _esc(row.gap or "—")[:28],
+                ]
+            )
+        story.append(
+            _table(rows, col_widths=[16 * mm, 48 * mm, 24 * mm, 40 * mm, 36 * mm])
+        )
 
     if report.recommendations:
         story.append(Paragraph("Recommendations", h2))

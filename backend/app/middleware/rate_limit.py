@@ -26,7 +26,8 @@ _RULES: list[tuple[str, re.Pattern[str], int, int]] = [
     ("POST", re.compile(r"^/api/v1/vulnerabilities/[^/]+/generate-ai-patch$"), 20, 60),
     ("POST", re.compile(r"^/api/v1/vulnerabilities/[^/]+/analyze-fp$"), 20, 60),
     ("POST", re.compile(r"^/api/v1/vulnerabilities/bulk-generate-ai-patch$"), 5, 60),
-    ("GET", re.compile(r"^/api/v1/reports/engagement(/pdf)?$"), 30, 60),
+    ("GET", re.compile(r"^/api/v1/reports/engagement(/pdf|/approval)?$"), 30, 60),
+    ("POST", re.compile(r"^/api/v1/reports/engagement/(approve|revoke-approval)$"), 20, 60),
     ("GET", re.compile(r"^/api/v1/reports/[^/]+(/pdf)?$"), 40, 60),
 ]
 

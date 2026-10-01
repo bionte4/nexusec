@@ -101,8 +101,23 @@ class EngagementFindingRow(BaseModel):
     remediation_excerpt: Optional[str] = None
     remediation_owner_label: Optional[str] = None
     last_retest_scan_id: Optional[uuid.UUID] = None
+    verification_state: str = "unverified"
+    # unverified | retested | closed_with_retest | closed_without_retest | false_positive
+    evidence_excerpt: Optional[str] = None
     first_seen_at: datetime
     last_seen_at: datetime
+
+
+class VerificationRow(BaseModel):
+    vulnerability_id: uuid.UUID
+    title: str
+    severity: Severity
+    status: FindingStatus
+    asset_name: str
+    before: str
+    after: str
+    retest_scan_id: Optional[uuid.UUID] = None
+    gap: Optional[str] = None
 
 
 class EngagementReport(BaseModel):
@@ -110,15 +125,21 @@ class EngagementReport(BaseModel):
 
     metadata: ReportMetadata
     engagement_type: str  # va | pt | mixed | custom
+    classification: str = "Confidential — Client Deliverable"
+    delivery: str = "draft"  # draft | client
+    dual_control: dict[str, Any] = Field(default_factory=dict)
     executive_summary: str
     scope: ReportSection
     methodology: ReportSection
+    limitations: ReportSection
+    playbook: ReportSection
     severity_summary: dict[str, int] = Field(default_factory=dict)
     status_summary: dict[str, int] = Field(default_factory=dict)
     scans: list[EngagementScanInfo] = Field(default_factory=list)
     top_findings: list[EngagementFindingRow] = Field(default_factory=list)
     findings: list[EngagementFindingRow] = Field(default_factory=list)
     remediation_highlights: list[str] = Field(default_factory=list)
+    verification_matrix: list[VerificationRow] = Field(default_factory=list)
     retest_summary: ReportSection
     recommendations: list[str] = Field(default_factory=list)
     disclaimer: str = (

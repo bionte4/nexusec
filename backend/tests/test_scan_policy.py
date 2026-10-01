@@ -61,6 +61,18 @@ def test_zap_mock_detection() -> None:
         )
         is False
     )
+    assert (
+        is_mock_scan_config(
+            ScannerEngine.ZAP, {"imported": True, "zap_mode": "import"}
+        )
+        is False
+    )
+    assert (
+        is_mock_scan_config(
+            ScannerEngine.OPENVAS, {"imported": True, "openvas_mode": "import"}
+        )
+        is False
+    )
 
 
 def test_engagement_blocks_synthetic_findings() -> None:
