@@ -51,10 +51,11 @@ API docs: http://localhost:8000/docs
 ## Usage guides
 
 - **Deploy VPS (production):** [`docs/deploy-vps.md`](docs/deploy-vps.md) — Ubuntu, Docker Compose, Nginx, DNS, Certbot; `.env` P1 (`RATE_LIMIT_ENABLED`, `SCAN_BLOCK_PRIVATE_TARGETS`) di bagian atas
+- **VA tanpa Greenbone (Nmap / Nuclei / Import):** [`docs/va-without-gvm.md`](docs/va-without-gvm.md) — jalur produksi VPS tanpa GVM
 - **VA & Penetration Testing:** [`docs/usage-va-pt.md`](docs/usage-va-pt.md) — assets, scans (nmap/nuclei/nexusec/openvas/zap), RoE + `roe_id`, import reports, engagement draft/client PDF, dual-control SoD, PTES/ASVS, PCI CDE-only
 - **AI integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — Admin UI settings form, Groq/OpenRouter/OpenAI/Ollama, remediation + bulk, FP, ChatOps
 - **Scanner connectors (UI cards):** [`docs/scanner-connectors.md`](docs/scanner-connectors.md) — Nmap, Nuclei, NexuSec, OpenVAS (GMP/import), ZAP import + offline OWASP Top10 suite, evidence (`tool_version` / `template_hash`), troubleshooting
-- **Greenbone live GMP:** [`docs/greenbone-gvm.md`](docs/greenbone-gvm.md) — connect `python-gvm` to an external GVM appliance
+- **Greenbone live GMP:** [`docs/greenbone-gvm.md`](docs/greenbone-gvm.md) — connect `python-gvm` to an external GVM appliance (opsional)
 - Data model: [`docs/data-model.md`](docs/data-model.md) — dual-control SoD, scan evidence keys, PTES/ASVS on engagement
 - Integrations & hardening: [`docs/integrations-hardening.md`](docs/integrations-hardening.md)
 ## Auth (Prompt 2)

@@ -3,7 +3,8 @@
 Dokumen ini menjelaskan cara memakai NexuSec untuk **Vulnerability Assessment (VA)** dan **Penetration Testing (PT)**: dari inventori aset, menjalankan scan, normalisasi temuan, hingga triage & remediation di SOC.
 
 > **Prasyarat:** stack sudah berjalan (`docker compose up -d`).  
-> UI: http://localhost:8081 · API docs: http://localhost:8000/docs
+> UI: http://localhost:8081 · API docs: http://localhost:8000/docs  
+> **VPS tanpa Greenbone?** Pakai Nmap + Nuclei + Import — [`va-without-gvm.md`](va-without-gvm.md)
 
 ---
 

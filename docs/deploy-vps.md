@@ -256,7 +256,8 @@ User pertama menjadi Super Admin.
    - **Client PDF** (`delivery=client`) — berisi playbook + PTES/ASVS.
    - PCI report default **CDE-only**.
 
-Detail AI: [`ai-integration.md`](ai-integration.md). VA/PT: [`usage-va-pt.md`](usage-va-pt.md).
+Detail AI: [`ai-integration.md`](ai-integration.md). VA/PT: [`usage-va-pt.md`](usage-va-pt.md).  
+Tanpa Greenbone di VPS: [`va-without-gvm.md`](va-without-gvm.md) (Nmap / Nuclei / Import).
 
 ## 11. Update & backup
 
@@ -322,6 +323,7 @@ docker compose up -d --force-recreate api scanner-worker
 ## Referensi
 
 - Quick start lokal: [`../README.md`](../README.md)
+- VA tanpa Greenbone (Nmap/Nuclei/Import): [`va-without-gvm.md`](va-without-gvm.md)
 - VA/PT usage (RoE, engagement, dual-control, PCI CDE): [`usage-va-pt.md`](usage-va-pt.md)
 - Hardening integrasi: [`integrations-hardening.md`](integrations-hardening.md)
 - Scanner connectors: [`scanner-connectors.md`](scanner-connectors.md)

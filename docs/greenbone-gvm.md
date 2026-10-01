@@ -7,6 +7,8 @@ Yang ada di platform:
 2. **import** — `config.report_xml` dari laporan GVM yang diekspor  
 3. **gmp** — klien live `python-gvm` ke appliance yang Anda sediakan
 
+**Belum punya GVM?** Jangan isi `GVM_*`. Jalur produksi: **Nmap + Nuclei + Import** — lihat [`va-without-gvm.md`](va-without-gvm.md).
+
 ## Prasyarat live GMP
 
 - Greenbone Community Edition / enterprise / Kali GVM yang sudah jalan  
