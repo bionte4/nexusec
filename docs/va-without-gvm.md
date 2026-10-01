@@ -1,9 +1,10 @@
 # VA tanpa Greenbone — Nmap, Nuclei & Import
 
-Panduan singkat untuk VPS/lab **tanpa** appliance GVM/OpenVAS.  
+Dokumen ini menjelaskan cara memakai NexuSec untuk VA **tanpa** appliance GVM/OpenVAS.  
 NexuSec **sudah menyertakan** Nmap + Nuclei di `scanner-worker`, serta **Import** laporan dari tool eksternal.
 
-> Detail UI connector: [`scanner-connectors.md`](scanner-connectors.md) · Alur VA/PT lengkap: [`usage-va-pt.md`](usage-va-pt.md) · GVM nanti: [`greenbone-gvm.md`](greenbone-gvm.md)
+> Alur lengkap OSINT → discovery → VA: [`va-pt-workflow.md`](va-pt-workflow.md)  
+> Detail UI connector: [`scanner-connectors.md`](scanner-connectors.md) · Alur VA/PT: [`usage-va-pt.md`](usage-va-pt.md) · GVM nanti: [`greenbone-gvm.md`](greenbone-gvm.md)
 
 ---
 

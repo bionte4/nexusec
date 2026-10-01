@@ -2,7 +2,7 @@
 
 Dokumen ini menjelaskan panel **Scanner connectors** di halaman **Scans** (UI: http://localhost:8081), serta perilaku tiap engine di backend/worker.
 
-> Ringkasan operasional VA/PT: [`usage-va-pt.md`](usage-va-pt.md) · Tanpa GVM: [`va-without-gvm.md`](va-without-gvm.md) · Hardening integrasi: [`integrations-hardening.md`](integrations-hardening.md)
+> Ringkasan operasional VA/PT: [`usage-va-pt.md`](usage-va-pt.md) · Alur engine: [`va-pt-workflow.md`](va-pt-workflow.md) · Tanpa GVM: [`va-without-gvm.md`](va-without-gvm.md) · Hardening integrasi: [`integrations-hardening.md`](integrations-hardening.md)
 
 ---
 

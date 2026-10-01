@@ -1,6 +1,6 @@
 # OSINT connector — passive recon (DNS · crt.sh · RDAP)
 
-Engine **`osint`** menambah fase *Intelligence Gathering* (PTES) tanpa binary Amass/subfinder.
+> Modul DNS/crt.sh/RDAP. Urutan lengkap dengan Nmap/Nuclei: [`va-pt-workflow.md`](va-pt-workflow.md)
 
 ## Modul (allowlist)
 

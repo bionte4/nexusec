@@ -4,6 +4,7 @@ Dokumen ini menjelaskan cara memakai NexuSec untuk **Vulnerability Assessment (V
 
 > **Prasyarat:** stack sudah berjalan (`docker compose up -d`).  
 > UI: http://localhost:8081 · API docs: http://localhost:8000/docs  
+> **Alur engine (OSINT → Nmap/NexuSec → Nuclei → laporan):** [`va-pt-workflow.md`](va-pt-workflow.md)  
 > **VPS tanpa Greenbone?** Pakai Nmap + Nuclei + Import — [`va-without-gvm.md`](va-without-gvm.md)
 
 ---
@@ -25,14 +26,16 @@ Login contoh (setelah bootstrap lokal):
 
 ## 2. Alur kerja ringkas
 
+Lihat alur lengkap antar-engine: **[`va-pt-workflow.md`](va-pt-workflow.md)** (OSINT → discovery → VA → PT manusia → Client PDF).
+
 ```text
 1. Login (Admin / Pentester)
 2. Daftarkan target → Assets (IP / Domain / Cloud)
-3. Buat Scan job (engine: nmap | nuclei | nexusec | openvas | zap)
+3. Scan berurutan: osint → nmap|nexusec → nuclei (+ import zap/openvas bila ada)
 4. Worker menjalankan tool di sandbox → status completed
 5. Output dinormalisasi → Vulnerabilities (dedup fingerprint)
 6. SOC triage: status, assign, FP analysis, AI remediation
-7. Laporan compliance (ISO / PCI-DSS / GDPR) bila diperlukan
+7. Engagement Draft → SoD approve → Client PDF (+ compliance bila perlu)
 ```
 
 ---

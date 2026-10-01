@@ -50,6 +50,7 @@ API docs: http://localhost:8000/docs
 
 ## Usage guides
 
+- **Alur VA/PT (OSINT → discovery → VA → laporan):** [`docs/va-pt-workflow.md`](docs/va-pt-workflow.md)
 - **Deploy VPS (production):** [`docs/deploy-vps.md`](docs/deploy-vps.md) — Ubuntu, Docker Compose, Nginx, DNS, Certbot; `.env` P1 (`RATE_LIMIT_ENABLED`, `SCAN_BLOCK_PRIVATE_TARGETS`) di bagian atas
 - **OSINT connector:** [`docs/osint-connector.md`](docs/osint-connector.md) — passive DNS + Certificate Transparency (crt.sh) + RDAP
 - **VA tanpa Greenbone (Nmap / Nuclei / Import):** [`docs/va-without-gvm.md`](docs/va-without-gvm.md) — jalur produksi VPS tanpa GVM
