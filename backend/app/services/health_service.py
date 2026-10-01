@@ -259,11 +259,25 @@ class HealthService:
         view = public_ai_settings_view(settings=s)
         anthropic_key = bool((s.anthropic_api_key or "").strip())
         any_key = bool(api_key) or anthropic_key
-        fallback = bool(s.ai_remediation_fallback_mock)
+        rem_fallback = bool(s.ai_remediation_fallback_mock)
+        fp_fallback = bool(s.ai_fp_fallback_mock)
+        chat_fallback = bool(s.ai_soc_chat_fallback_mock)
+        any_fallback = rem_fallback or fp_fallback or chat_fallback
+        prod_like = (s.app_env or "").lower() in {"production", "prod"}
         if any_key:
-            status = "ok"
-            detail = f"LLM credentials configured via {view['source']} (use Test connection to verify)"
-        elif fallback:
+            if prod_like and any_fallback:
+                status = "degraded"
+                detail = (
+                    f"LLM OK via {view['source']}, but mock fallback still enabled "
+                    "(set AI_*_FALLBACK_MOCK=false for strict VA)"
+                )
+            else:
+                status = "ok"
+                detail = (
+                    f"LLM credentials configured via {view['source']} "
+                    "(use Test connection to verify)"
+                )
+        elif rem_fallback:
             status = "degraded"
             detail = "No LLM API key — save key on this card (or set AI_API_KEY in .env)"
         else:
@@ -280,13 +294,17 @@ class HealthService:
                 "ai_base_url": base or None,
                 "ai_model": model or None,
                 "source": view["source"],
+                "app_env": s.app_env,
                 "remediation_enabled": bool(s.ai_remediation_enabled),
-                "remediation_fallback_mock": fallback,
+                "remediation_fallback_mock": rem_fallback,
                 "fp_enabled": bool(s.ai_fp_enabled),
+                "fp_fallback_mock": fp_fallback,
                 "soc_chat_enabled": bool(s.ai_soc_chat_enabled),
+                "soc_chat_fallback_mock": chat_fallback,
                 "recommended_provider": "groq",
                 "setup_hint": (
-                    "Save API key + Base URL https://api.groq.com/openai/v1 on this card"
+                    "Save API key + Base URL https://api.groq.com/openai/v1 on this card; "
+                    "keep AI_*_FALLBACK_MOCK=false in production"
                 ),
             },
         )

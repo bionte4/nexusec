@@ -14,6 +14,7 @@ from app.core.enums import AssetCriticality, AssetType, FindingStatus, Severity
 from app.models.asset import Asset
 from app.models.vulnerability import Vulnerability
 from app.services.ai_filter import (
+    AIFPAnalysisError,
     AIFPAnalysisService,
     FPAnalysisContext,
     _extract_json,
@@ -79,6 +80,27 @@ def test_mock_fp_kev_is_true_positive() -> None:
 def test_resolve_provider_auto_mock() -> None:
     settings = Settings(openai_api_key="", anthropic_api_key="", ai_fp_provider="auto")
     assert AIFPAnalysisService(settings).resolve_provider() == "mock"
+
+
+@pytest.mark.asyncio
+async def test_analyze_rejects_silent_mock_when_fallback_off() -> None:
+    settings = Settings(
+        openai_api_key="",
+        anthropic_api_key="",
+        ai_api_key="",
+        ai_fp_provider="auto",
+        ai_fp_fallback_mock=False,
+    )
+    svc = AIFPAnalysisService(settings)
+    ctx = FPAnalysisContext(
+        title="XSS",
+        description="reflected",
+        cwe_id="CWE-79",
+        severity=Severity.MEDIUM,
+    )
+    with pytest.raises(AIFPAnalysisError) as exc:
+        await svc.analyze(ctx)
+    assert exc.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -198,7 +220,20 @@ async def test_vulnerability_service_analyze_fp_persists() -> None:
     db.refresh = AsyncMock()
 
     service = VulnerabilityService(db)
-    resp = await service.analyze_false_positive(vuln.id, organization_id=org_id, persist=True)
+    with patch(
+        "app.services.vulnerability_service.AIFPAnalysisService",
+        return_value=AIFPAnalysisService(
+            Settings(
+                openai_api_key="",
+                anthropic_api_key="",
+                ai_api_key="",
+                ai_fp_provider="mock",
+            )
+        ),
+    ):
+        resp = await service.analyze_false_positive(
+            vuln.id, organization_id=org_id, persist=True
+        )
 
     assert resp.provider == "mock"
     assert "ai_fp_analysis" in vuln.threat_intel_metadata

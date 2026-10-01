@@ -1026,6 +1026,28 @@ function SystemStatusPanel({
                     : (info.detail ?? '')}
                 </div>
 
+                {isAi && enableAiTest && info.meta ? (
+                  <div
+                    className={`mt-2 rounded-md border px-2.5 py-2 text-[11px] leading-relaxed ${
+                      info.meta.remediation_fallback_mock ||
+                      info.meta.fp_fallback_mock ||
+                      info.meta.soc_chat_fallback_mock
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                        : 'border-surface-600 bg-surface-950/80 text-surface-400'
+                    }`}
+                  >
+                    {info.meta.remediation_fallback_mock ||
+                    info.meta.fp_fallback_mock ||
+                    info.meta.soc_chat_fallback_mock
+                      ? t('admin.aiFallbackWarn', {
+                          rem: String(!!info.meta.remediation_fallback_mock),
+                          fp: String(!!info.meta.fp_fallback_mock),
+                          chat: String(!!info.meta.soc_chat_fallback_mock),
+                        })
+                      : t('admin.aiFallbackOk')}
+                  </div>
+                ) : null}
+
                 {isAi && enableAiTest ? (
                   <div className="mt-3 space-y-2 border-t border-surface-700 pt-3">
                     <p className="text-[11px] leading-relaxed text-surface-500">

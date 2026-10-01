@@ -22,6 +22,38 @@ def test_check_ai_degraded_without_key() -> None:
     assert result.status == "degraded"
     assert result.meta["ai_api_key_set"] is False
     assert result.meta["recommended_provider"] == "groq"
+    assert result.meta["remediation_fallback_mock"] is True
+
+
+def test_check_ai_unavailable_without_key_strict() -> None:
+    svc = HealthService(
+        Settings(
+            ai_api_key="",
+            openai_api_key="",
+            anthropic_api_key="",
+            ai_remediation_fallback_mock=False,
+        )
+    )
+    result = asyncio.get_event_loop().run_until_complete(svc.check_ai())
+    assert result.status == "unavailable"
+    assert result.meta["remediation_fallback_mock"] is False
+
+
+def test_check_ai_degraded_when_prod_fallback_on() -> None:
+    svc = HealthService(
+        Settings(
+            app_env="production",
+            ai_api_key="gsk-test",
+            ai_base_url="https://api.groq.com/openai/v1",
+            ai_model="openai/gpt-oss-20b",
+            ai_remediation_fallback_mock=True,
+            ai_fp_fallback_mock=False,
+            ai_soc_chat_fallback_mock=False,
+        )
+    )
+    result = asyncio.get_event_loop().run_until_complete(svc.check_ai())
+    assert result.status == "degraded"
+    assert "mock fallback" in result.detail.lower()
 
 
 def test_test_ai_connection_without_key() -> None:

@@ -427,10 +427,11 @@ Set di `.env` (contoh Groq):
 
 ```bash
 AI_REMEDIATION_ENABLED=true
-AI_REMEDIATION_FALLBACK_MOCK=true
+AI_REMEDIATION_FALLBACK_MOCK=false
+AI_FP_FALLBACK_MOCK=false
 AI_API_KEY=gsk_...
 AI_BASE_URL=https://api.groq.com/openai/v1
-AI_MODEL=llama-3.3-70b-versatile
+AI_MODEL=openai/gpt-oss-20b
 ```
 
 Panduan lengkap provider + bulk API: **[`ai-integration.md`](ai-integration.md)**.

@@ -125,6 +125,28 @@ def test_resolve_provider_auto_mock() -> None:
     assert AIRemediationService(settings).resolve_provider() == "mock"
 
 
+@pytest.mark.asyncio
+async def test_service_generate_rejects_silent_mock_when_fallback_off() -> None:
+    settings = Settings(
+        ai_api_key="",
+        openai_api_key="",
+        anthropic_api_key="",
+        ai_remediation_provider="auto",
+        ai_remediation_fallback_mock=False,
+        ai_remediation_enabled=True,
+    )
+    svc = AIRemediationService(settings)
+    ctx = VulnerabilityContext(
+        title="XSS",
+        description="reflected",
+        cwe_id="CWE-79",
+        severity=Severity.HIGH,
+    )
+    with pytest.raises(AIRemediationError) as exc:
+        await svc.generate(ctx)
+    assert exc.value.status_code == 400
+
+
 def test_generate_ai_remediation_patch_mock_without_key() -> None:
     with patch("app.services.ai_remediation.get_settings") as gs:
         gs.return_value = Settings(

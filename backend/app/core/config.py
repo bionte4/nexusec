@@ -97,7 +97,8 @@ class Settings(BaseSettings):
     # --- AI remediation (Prompt 14 / 17) ---
     ai_remediation_enabled: bool = True
     ai_remediation_provider: str = "auto"  # auto | openai | mock
-    ai_remediation_fallback_mock: bool = True
+    # Default False: fail closed (no silent template-v2). Set true only for offline demo/CI.
+    ai_remediation_fallback_mock: bool = False
     ai_remediation_timeout_seconds: float = 60.0
     # OpenAI-compatible free providers (Groq, OpenRouter, …) — Prompt 17
     ai_api_key: str = ""  # AI_API_KEY
@@ -108,13 +109,13 @@ class Settings(BaseSettings):
     # --- AI false-positive analysis (Prompt 15) ---
     ai_fp_enabled: bool = True
     ai_fp_provider: str = "auto"  # auto | openai | anthropic | mock
-    ai_fp_fallback_mock: bool = True
+    ai_fp_fallback_mock: bool = False
     ai_fp_timeout_seconds: float = 60.0
 
     # --- AI SOC ChatOps / RAG (Prompt 16) ---
     ai_soc_chat_enabled: bool = True
     ai_soc_chat_provider: str = "auto"  # auto | openai | anthropic | mock
-    ai_soc_chat_fallback_mock: bool = True
+    ai_soc_chat_fallback_mock: bool = False
     ai_soc_chat_timeout_seconds: float = 90.0
     ai_soc_chat_retrieval_limit: int = 25
     ai_soc_chat_max_sources: int = 40

@@ -70,6 +70,7 @@ async def test_chat_mock_provider_with_empty_db() -> None:
         openai_api_key="",
         anthropic_api_key="",
         ai_soc_chat_provider="auto",
+        ai_soc_chat_fallback_mock=True,
     )
     db = AsyncMock()
 

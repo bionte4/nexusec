@@ -244,6 +244,11 @@ class SocChatService:
         rag = await self.retrieve(cleaned)
         provider = self.resolve_provider()
         if provider == "mock":
+            if self.provider != "mock" and not self.settings.ai_soc_chat_fallback_mock:
+                raise SocChatError(
+                    "AI_API_KEY (or OPENAI_API_KEY) is not configured",
+                    status_code=400,
+                )
             answer = mock_answer(cleaned, rag)
             model = "rag-template-v1"
         else:

@@ -698,7 +698,13 @@ class AIRemediationService:
 
         provider = self.resolve_provider()
         if provider == "mock":
-            return mock_remediation(ctx)
+            # Explicit provider=mock always allowed; otherwise only when fallback enabled.
+            if self.provider == "mock" or self.settings.ai_remediation_fallback_mock:
+                return mock_remediation(ctx)
+            raise AIRemediationError(
+                "AI_API_KEY (or OPENAI_API_KEY) is not configured",
+                status_code=400,
+            )
 
         user_prompt = build_user_prompt(ctx)
         try:

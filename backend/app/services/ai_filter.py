@@ -301,7 +301,12 @@ class AIFPAnalysisService:
 
         provider = self.resolve_provider()
         if provider == "mock":
-            return mock_fp_analysis(ctx)
+            if self.provider == "mock" or self.settings.ai_fp_fallback_mock:
+                return mock_fp_analysis(ctx)
+            raise AIFPAnalysisError(
+                "AI_API_KEY (or OPENAI_API_KEY) is not configured",
+                status_code=400,
+            )
 
         user_prompt = build_user_prompt(ctx)
         try:

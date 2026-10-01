@@ -51,9 +51,11 @@ Prioritas kredensial: **DB/UI → env `.env` → mock fallback**.
 ## 3. Variabel `.env` (opsional / fallback)
 
 ```bash
-# Master switch
+# Master switch — false = fail closed (no silent template-v2)
 AI_REMEDIATION_ENABLED=true
-AI_REMEDIATION_FALLBACK_MOCK=true
+AI_REMEDIATION_FALLBACK_MOCK=false
+AI_FP_FALLBACK_MOCK=false
+AI_SOC_CHAT_FALLBACK_MOCK=false
 AI_REMEDIATION_TIMEOUT_SECONDS=60
 
 # Hanya dipakai jika belum ada setting di UI/DB
@@ -61,6 +63,8 @@ AI_API_KEY=
 AI_BASE_URL=https://api.groq.com/openai/v1
 AI_MODEL=openai/gpt-oss-20b
 ```
+
+> **Produksi:** keep `*_FALLBACK_MOCK=false`. **Lab offline:** set `true` for deterministic templates without a key.
 
 ## 3. Provider contoh (rekomendasi)
 
@@ -80,9 +84,13 @@ AI_MODEL=openai/gpt-oss-20b
 AI_API_KEY=gsk_...
 AI_BASE_URL=https://api.groq.com/openai/v1
 AI_MODEL=openai/gpt-oss-20b
-AI_REMEDIATION_FALLBACK_MOCK=true
+AI_REMEDIATION_FALLBACK_MOCK=false
+AI_FP_FALLBACK_MOCK=false
+AI_SOC_CHAT_FALLBACK_MOCK=false
 ```
 
+> **Produksi:** biarkan `false` agar tidak diam-diam jatuh ke `mock/template-v2`.  
+> **Lab offline:** set `true` jika ingin template deterministik tanpa API key.
 3. Recreate API:
 
 ```bash
@@ -151,7 +159,7 @@ Di UI **Remediation**:
 
 - Output AI adalah **draft** — wajib review manusia sebelum apply ke produksi.
 - Jangan masukkan secret target / `.env` ke prompt secara manual.
-- Rate limit provider: set `AI_REMEDIATION_FALLBACK_MOCK=true` agar job tidak gagal keras saat 429/timeout.
+- Rate limit provider: temporarily set `AI_REMEDIATION_FALLBACK_MOCK=true` only if you accept silent template-v2 drafts; prefer retry/backoff with fallback left `false` in production.
 - Bulk dibatasi **25** finding per request untuk melindungi kuota LLM.
 
 ## 6. Troubleshooting

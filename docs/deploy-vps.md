@@ -98,12 +98,15 @@ REDIS_PASSWORD=<hasil_generate>
 # Harus exact origin browser (HTTPS)
 CORS_ORIGINS=https://nexusec.my.id,https://www.nexusec.my.id
 
-# AI opsional di .env — bisa diisi nanti dari Admin UI
+# AI — key boleh kosong dulu; isi lewat Admin UI. Fallback mock OFF di produksi.
 AI_API_KEY=
 AI_BASE_URL=https://api.groq.com/openai/v1
 AI_MODEL=openai/gpt-oss-20b
-AI_REMEDIATION_FALLBACK_MOCK=true
+AI_REMEDIATION_FALLBACK_MOCK=false
+AI_FP_FALLBACK_MOCK=false
+AI_SOC_CHAT_FALLBACK_MOCK=false
 
+# Scanner: OpenVAS/ZAP mock = lab saja. Produksi VA: nmap/nuclei (+ OpenVAS live).
 OPENVAS_MODE=mock
 ```
 
@@ -248,6 +251,7 @@ docker compose exec -T postgres pg_dump -U nexusec nexusec \
 
 - [ ] Semua `CHANGE_ME` diganti; `.env` tidak di-commit
 - [ ] `APP_ENV=production`, `DEBUG=false`
+- [ ] `AI_*_FALLBACK_MOCK=false` + Admin → Test connection OK
 - [ ] `CORS_ORIGINS` hanya HTTPS domain produksi
 - [ ] Port 8000/8081/5433/6379 hanya di `127.0.0.1`
 - [ ] UFW: 22 + 80 + 443

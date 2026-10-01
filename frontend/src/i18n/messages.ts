@@ -291,7 +291,16 @@ const en = {
     aiRemediation: 'Generate AI remediation',
     aiRemediationRunning: 'Generating…',
     aiRemediationDone: 'AI remediation saved ({provider}/{model}).',
+    aiRemediationMockDone:
+      'AI remediation used mock template ({provider}/{model}) — configure LLM key and set AI_*_FALLBACK_MOCK=false.',
     aiRemediationDemoDone: 'AI remediation generated (demo mode — not persisted).',
+    aiRemediationMockBanner:
+      'This remediation is a mock/template draft, not a live LLM. Do not treat it as production guidance.',
+    aiMockWarn: 'Warning: mock/template AI output — not a live LLM.',
+    syntheticFindingWarn:
+      'This finding looks synthetic (ZAP/NexuSec mock). Prefer nmap/nuclei or imported real reports for production VA.',
+    fpMockBanner:
+      'FP analysis used a mock/heuristic provider. Configure LLM credentials for live triage.',
     aiRemediationFailed: 'AI remediation failed',
     bulkAiRemediation: 'Generate AI remediation',
     bulkAiDone: 'AI remediation: {ok} ok, {fail} failed (max 25).',
@@ -438,6 +447,9 @@ const en = {
     aiApplyGroq: 'Use Groq defaults',
     aiClearKey: 'Clear saved key',
     aiSource: 'Source: {source}',
+    aiFallbackWarn:
+      'Mock fallback is ON (remediation={rem}, FP={fp}, chat={chat}). Set AI_*_FALLBACK_MOCK=false in .env for strict VA.',
+    aiFallbackOk: 'Mock fallback OFF — AI will fail closed without a live LLM key.',
   },
 } as const
 
@@ -728,7 +740,16 @@ const id: Messages = {
     aiRemediation: 'Buat remediasi AI',
     aiRemediationRunning: 'Menghasilkan…',
     aiRemediationDone: 'Remediasi AI disimpan ({provider}/{model}).',
+    aiRemediationMockDone:
+      'Remediasi AI memakai template mock ({provider}/{model}) — pasang key LLM dan set AI_*_FALLBACK_MOCK=false.',
     aiRemediationDemoDone: 'Remediasi AI dibuat (mode demo — tidak disimpan).',
+    aiRemediationMockBanner:
+      'Remediasi ini draft mock/template, bukan LLM live. Jangan dipakai sebagai panduan produksi.',
+    aiMockWarn: 'Peringatan: output AI mock/template — bukan LLM live.',
+    syntheticFindingWarn:
+      'Finding ini tampak sintetis (ZAP/NexuSec mock). Untuk VA produksi pakai nmap/nuclei atau impor report asli.',
+    fpMockBanner:
+      'Analisis FP memakai provider mock/heuristic. Pasang kredensial LLM untuk triage live.',
     aiRemediationFailed: 'Remediasi AI gagal',
     bulkAiRemediation: 'Buat remediasi AI (massal)',
     bulkAiDone: 'Remediasi AI: {ok} berhasil, {fail} gagal (maks 25).',
@@ -876,6 +897,9 @@ const id: Messages = {
     aiApplyGroq: 'Pakai default Groq',
     aiClearKey: 'Hapus key tersimpan',
     aiSource: 'Sumber: {source}',
+    aiFallbackWarn:
+      'Fallback mock AKTIF (remediasi={rem}, FP={fp}, chat={chat}). Set AI_*_FALLBACK_MOCK=false di .env untuk VA ketat.',
+    aiFallbackOk: 'Fallback mock OFF — AI gagal keras jika key LLM belum ada.',
   },
 }
 
