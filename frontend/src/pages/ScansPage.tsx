@@ -213,7 +213,7 @@ export function ScansPage() {
         scan_type: 'va',
         engine: 'openvas',
         config: {
-          openvas_mode: 'mock',
+          openvas_mode: 'gmp',
           openvas_catalogs: ['webserver', 'dbserver', 'appserver'],
         },
       }))
@@ -227,7 +227,8 @@ export function ScansPage() {
         engine: 'zap',
         config: {
           zap_mode: 'mock',
-          zap_policy: 'baseline',
+          zap_policy: 'owasp_top10',
+          lab_mode: true,
         },
       }))
       return
@@ -290,7 +291,7 @@ export function ScansPage() {
         scan_type: 'va',
         engine: 'openvas',
         config: {
-          openvas_mode: 'mock',
+          openvas_mode: 'gmp',
           openvas_catalogs: ['webserver', 'dbserver', 'appserver'],
         },
       }))
@@ -303,7 +304,7 @@ export function ScansPage() {
         scan_type: 'va',
         engine: 'zap',
         config: {
-          zap_mode: 'mock',
+          zap_mode: 'import',
           zap_policy: 'baseline',
         },
       }))
@@ -740,7 +741,7 @@ export function ScansPage() {
                 type="button"
                 onClick={() => applyPreset('va_openvas')}
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
-                title={t('scans.presetMockLabTitle')}
+                title={t('scans.presetOpenvasTitle')}
               >
                 {t('scans.presetOpenvas')}
               </button>
@@ -748,7 +749,7 @@ export function ScansPage() {
                 type="button"
                 onClick={() => applyPreset('va_zap')}
                 className="rounded-md border border-surface-600 px-2 py-1 text-[11px] text-surface-300 hover:border-accent hover:text-accent"
-                title={t('scans.presetMockLabTitle')}
+                title={t('scans.presetZapTitle')}
               >
                 {t('scans.presetZap')}
               </button>
@@ -800,7 +801,7 @@ export function ScansPage() {
                         openvas_mode:
                           typeof f.config.openvas_mode === 'string'
                             ? f.config.openvas_mode
-                            : 'mock',
+                            : 'gmp',
                       }
                     }
                     if (engine === 'zap') {
@@ -809,7 +810,7 @@ export function ScansPage() {
                         zap_mode:
                           typeof f.config.zap_mode === 'string'
                             ? f.config.zap_mode
-                            : 'mock',
+                            : 'import',
                         zap_policy:
                           typeof f.config.zap_policy === 'string'
                             ? f.config.zap_policy
@@ -843,9 +844,19 @@ export function ScansPage() {
             </div>
             {form.engine === 'openvas' ? (
               <div className="space-y-2">
-                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
-                  {t('scans.mockLabWarningOpenvas')}
-                </p>
+                {(
+                  typeof form.config.openvas_mode === 'string'
+                    ? form.config.openvas_mode
+                    : 'gmp'
+                ) === 'mock' ? (
+                  <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+                    {t('scans.mockLabWarningOpenvas')}
+                  </p>
+                ) : (
+                  <p className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1.5 text-[11px] text-sky-100">
+                    {t('scans.prodHintOpenvas')}
+                  </p>
+                )}
                 <div className="space-y-1">
                   <label className="text-[11px] text-surface-400">
                     {t('scans.openvasMode')}
@@ -854,18 +865,23 @@ export function ScansPage() {
                     value={
                       typeof form.config.openvas_mode === 'string'
                         ? form.config.openvas_mode
-                        : 'mock'
+                        : 'gmp'
                     }
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const openvas_mode = e.target.value
                       setForm({
                         ...form,
-                        config: { ...form.config, openvas_mode: e.target.value },
+                        config: {
+                          ...form.config,
+                          openvas_mode,
+                          lab_mode: openvas_mode === 'mock' ? true : false,
+                        },
                       })
-                    }
+                    }}
                     className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
                   >
-                    <option value="mock">{t('scans.openvasModeMock')}</option>
                     <option value="gmp">{t('scans.openvasModeGmp')}</option>
+                    <option value="mock">{t('scans.openvasModeMock')}</option>
                   </select>
                   <p className="text-[10px] text-surface-500">
                     {t('scans.openvasModeHint')}
@@ -921,9 +937,19 @@ export function ScansPage() {
             ) : null}
             {form.engine === 'zap' ? (
               <div className="space-y-2">
-                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
-                  {t('scans.mockLabWarningZap')}
-                </p>
+                {(
+                  typeof form.config.zap_mode === 'string'
+                    ? form.config.zap_mode
+                    : 'import'
+                ) === 'mock' ? (
+                  <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100">
+                    {t('scans.mockLabWarningZap')}
+                  </p>
+                ) : (
+                  <p className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1.5 text-[11px] text-sky-100">
+                    {t('scans.prodHintZap')}
+                  </p>
+                )}
                 <div className="space-y-1">
                   <label className="text-[11px] text-surface-400">
                     {t('scans.zapMode')}
@@ -932,16 +958,22 @@ export function ScansPage() {
                     value={
                       typeof form.config.zap_mode === 'string'
                         ? form.config.zap_mode
-                        : 'mock'
+                        : 'import'
                     }
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const zap_mode = e.target.value
                       setForm({
                         ...form,
-                        config: { ...form.config, zap_mode: e.target.value },
+                        config: {
+                          ...form.config,
+                          zap_mode,
+                          lab_mode: zap_mode === 'mock' ? true : false,
+                        },
                       })
-                    }
+                    }}
                     className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
                   >
+                    <option value="import">{t('scans.zapModeImport')}</option>
                     <option value="mock">{t('scans.zapModeMock')}</option>
                   </select>
                   <p className="text-[10px] text-surface-500">
@@ -968,6 +1000,7 @@ export function ScansPage() {
                   >
                     <option value="baseline">baseline</option>
                     <option value="full">full</option>
+                    <option value="owasp_top10">owasp_top10 (offline suite)</option>
                   </select>
                 </div>
               </div>
@@ -995,6 +1028,28 @@ export function ScansPage() {
                   />
                   <span>{t('scans.roeAckRequired')}</span>
                 </label>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-surface-400">
+                    {t('scans.roeId')}
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      typeof form.config.roe_id === 'string' ? form.config.roe_id : ''
+                    }
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          roe_id: e.target.value.trim() || undefined,
+                        },
+                      })
+                    }
+                    placeholder={t('scans.roeIdPlaceholder')}
+                    className="w-full rounded-lg border border-surface-600 bg-surface-900 px-3 py-2 text-sm outline-none focus:border-accent"
+                  />
+                </div>
                 <p className="text-[10px] text-surface-500">{t('scans.roeHint')}</p>
               </div>
             ) : null}

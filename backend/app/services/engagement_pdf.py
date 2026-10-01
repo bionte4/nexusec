@@ -128,10 +128,35 @@ def render_engagement_pdf(report: EngagementReport) -> bytes:
             Paragraph(
                 f"<b>Dual control:</b> approved="
                 f"{_esc(str(report.dual_control.get('approved')))} · "
-                f"delivery={_esc(str(report.delivery))}",
+                f"delivery={_esc(str(report.delivery))} · "
+                f"SoD={_esc(str(report.dual_control.get('sod') or 'n/a'))}",
                 small,
             )
         )
+
+    story.append(Paragraph(_esc(report.ptes_checklist.heading), h2))
+    story.append(Paragraph(_esc(report.ptes_checklist.summary), body))
+    if report.ptes_checklist.narrative:
+        story.append(Paragraph(_esc(report.ptes_checklist.narrative), small))
+    if report.ptes_checklist.tables:
+        tbl = report.ptes_checklist.tables[0]
+        rows = [list(tbl.get("columns") or [])]
+        for r in (tbl.get("rows") or [])[:12]:
+            rows.append([_esc(str(c)) for c in r])
+        if len(rows) > 1:
+            story.append(_table(rows, col_widths=[40 * mm, 25 * mm, 20 * mm, 85 * mm]))
+
+    story.append(Paragraph(_esc(report.asvs_checklist.heading), h2))
+    story.append(Paragraph(_esc(report.asvs_checklist.summary), body))
+    if report.asvs_checklist.narrative:
+        story.append(Paragraph(_esc(report.asvs_checklist.narrative), small))
+    if report.asvs_checklist.tables:
+        tbl = report.asvs_checklist.tables[0]
+        rows = [list(tbl.get("columns") or [])]
+        for r in (tbl.get("rows") or [])[:14]:
+            rows.append([_esc(str(c)) for c in r])
+        if len(rows) > 1:
+            story.append(_table(rows, col_widths=[15 * mm, 70 * mm, 30 * mm, 25 * mm]))
 
     story.append(Paragraph("Severity & status summary", h2))
     sev_rows = [["Severity", "Count"]]

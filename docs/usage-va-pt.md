@@ -135,8 +135,8 @@ VA fokus **discovery + deteksi kerentanan** (bukan eksploit penuh).
 | `nmap` | `discovery` / `va` | Port/service fingerprint + NSE unauthenticated; `port_preset` `common_va` / `webserver` / `dbserver` / `appserver` |
 | `nuclei` | `va` / `pt` | Template-driven VA; default packs `http`+`ssl`+`network` (tanpa kredensial) |
 | `nexusec` | `va` / `custom` | Scanner internal (asyncio) |
-| `openvas` | `va` | Greenbone/OpenVAS — mock catalogs `webserver`/`dbserver`/`appserver`, atau GMP live / `report_xml` |
-| `zap` | `va` | OWASP ZAP DAST — mock JSON alerts (`zap_mode=mock`) atau import `report_json` |
+| `openvas` | `va` | Greenbone/OpenVAS — default **GMP** / `report_xml`; mock + `lab_mode` untuk lab saja |
+| `zap` | `va` | OWASP ZAP DAST — default **import** `report_json`; mock + `lab_mode` untuk lab |
 | `other` | — | Placeholder API/UI |
 
 Jenis `scan_type`: `discovery` · `va` · `pt` · `compliance` · `custom`.
@@ -462,26 +462,35 @@ UI: **SOC Chat** — tanya dalam bahasa natural, contoh:
 
 Laporan engagement berisi cover/metadata, **classification**, scope + RoE notes, metodologi, **limitations**, ringkasan severity/status, daftar scan, top findings (dengan verification state), highlight remedi, **verification matrix (before → after)**, dan ringkasan retest.
 
-**Gate keamanan (P0)**
-- Scan enqueue **wajib** `config.roe_acknowledged=true` (atau `lab_mode=true` hanya di non-production).
+**Gate keamanan (P0/P1/P2)**
+- Scan enqueue **wajib** `config.roe_acknowledged=true` (atau `lab_mode=true` hanya di non-production untuk skip RoE).
+- Simpan **`config.roe_id`** (ref dokumen RoE) — muncul di evidence API + engagement scan info.
+- Produksi **menolak** enqueue OpenVAS/ZAP mock kecuali `lab_mode=true` (GMP / Import / nmap / nuclei untuk VA nyata).
+- `OPENVAS_GMP_FALLBACK_MOCK` **diabaikan** di production (fail closed, tidak silent mock).
+- Nuclei mencatat `tool_version` + **`template_hash`**; nmap mencatat `tool_version` (cadence pin: [`scanner-connectors.md`](scanner-connectors.md)).
 - Export engagement **Client PDF** (`delivery=client`) **diblok** jika ada finding sintetis / job ZAP·OpenVAS mock.
+- **Dual-control SoD:** admin/lead approve, dan **approver ≠ scan.created_by**.
+- Engagement menyertakan checklist **PTES** + **ASVS L1** (override via `config.ptes_checklist` / `asvs_checklist`).
+- Offline DAST internasional tanpa zaproxy: `zap_policy=owasp_top10` (lab) — 10 kategori OWASP Top 10:2021.
 - **Draft PDF/JSON** (`delivery=draft`) tetap bisa diunduh untuk review internal, dengan warning + classification lab/draft.
 - Override lab eksplisit: `allow_mock=true` (bukan untuk klien).
 - Aksi `scan.enqueue` dan `report.engagement.export` dicatat di audit log.
 
 **Kualitas VA/PT (P2)**
 - Prefer **Import ZAP JSON / OpenVAS XML** (atau nmap/nuclei live) — mock ZAP/OpenVAS = lab saja dan memblokir export klien.
-- PDF menampilkan classification, limitations, dan verification matrix (gap Critical/High tanpa retest).
+- Offline DAST internasional: preset ZAP → `owasp_top10` (lab suite A01–A10, tanpa zaproxy).
+- PDF menampilkan classification, limitations, verification matrix, **PTES** + **ASVS L1**.
 - Finding closed tanpa `last_retest_scan_id` muncul sebagai gap di matrix.
+- SoD pada **Approve client**: approver ≠ pembuat scan.
 
 **Proses pentest (P3)**
 - Playbook checklist di engagement report: Discovery → VA → confirm → remedi → retest → dual-control → Client PDF.
-- Dual control: Admin **Approve client** lalu **Client PDF** (`delivery=client`). Draft JSON/PDF tidak perlu approval.
+- Dual control: Admin **Approve client** (bukan creator scan) lalu **Client PDF** (`delivery=client`). Draft JSON/PDF tidak perlu approval.
 - PCI-DSS report default **`cde_only=true`** — hanya aset `is_cde_scope`.
 
 **UI**
-- **Scans** → centang RoE sebelum create/pipeline; peringatan mock pada ZAP/OpenVAS; tombol **Engagement PDF** per scan
-- **Vulnerabilities** → Draft JSON/PDF, **Approve client** (admin), **Client PDF**; PCI CDE-only
+- **Scans** → RoE + opsional **RoE ID**; OpenVAS default GMP; ZAP import atau `owasp_top10` lab; Engagement PDF per scan
+- **Vulnerabilities** → Draft JSON/PDF, **Approve client** (admin, SoD), **Client PDF**; PCI CDE-only
 
 **API**
 

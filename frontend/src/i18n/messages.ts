@@ -143,15 +143,23 @@ const en = {
     presetZapName: 'DAST (OWASP ZAP)',
     presetMockLabTitle:
       'Lab/CI only — mock findings cannot be exported in client engagement reports',
+    presetOpenvasTitle:
+      'Production default: live GMP (configure GVM_*). Switch to mock only for labs.',
+    presetZapTitle:
+      'Offline OWASP Top10 DAST suite (lab) or Import real ZAP JSON for client delivery.',
     mockLabWarningOpenvas:
-      'Mock OpenVAS is for lab/CI only and blocks client engagement export. Prefer GMP live or Import OpenVAS/GVM XML.',
+      'Mock OpenVAS sets lab_mode and blocks client engagement export. Prefer GMP live or Import OpenVAS/GVM XML.',
     mockLabWarningZap:
-      'Mock ZAP is for lab/CI only and blocks client engagement export. Prefer Import real ZAP JSON (site.alerts).',
+      'Mock ZAP sets lab_mode and blocks client engagement export. Prefer Import real ZAP JSON (site.alerts).',
+    prodHintOpenvas:
+      'GMP live or Import OpenVAS XML is required for client-ready evidence. Production refuses mock without lab_mode.',
+    prodHintZap:
+      'Use Import scanner report with real ZAP JSON. Production refuses mock without lab_mode.',
     openvasMode: 'OpenVAS mode',
-    openvasModeMock: 'mock — synthetic GVM report (lab/CI only)',
+    openvasModeMock: 'mock — synthetic GVM report (lab/CI only; sets lab_mode)',
     openvasModeGmp: 'gmp — live Greenbone (set GVM_* in .env)',
     openvasModeHint:
-      'Needs GVM_USERNAME/PASSWORD and GVM_SOCKET or GVM_HOST. See docs/greenbone-gvm.md. Default follows OPENVAS_MODE.',
+      'Needs GVM_USERNAME/PASSWORD and GVM_SOCKET or GVM_HOST. See docs/greenbone-gvm.md. Default follows OPENVAS_MODE (gmp recommended).',
     openvasCatalogs: 'Mock catalogs (unauthenticated)',
     openvasCatalogWeb: 'webserver',
     openvasCatalogDb: 'dbserver',
@@ -159,17 +167,20 @@ const en = {
     openvasCatalogHint:
       'Synthetic findings for web / DB / app servers without credentials. Ignored in gmp mode when live GVM is configured.',
     zapMode: 'ZAP mode',
-    zapModeMock: 'mock — synthetic ZAP JSON alerts (lab/CI only)',
+    zapModeImport: 'import — use Import scanner report (report_json)',
+    zapModeMock: 'mock — synthetic ZAP JSON alerts (lab/CI only; sets lab_mode)',
     zapModeHint:
-      'Mock DAST alerts without a live ZAP daemon — not for client delivery. Import real ZAP JSON via Import scanner report below.',
+      'Import real ZAP JSON via Import scanner report. Mock DAST is not for client delivery.',
     zapPolicy: 'ZAP policy',
     authenticatedVa: 'Authenticated VA (credentialed)',
     roeAck:
       'I confirm written Rules of Engagement / authorization for credentialed scanning of these assets.',
     roeAckRequired:
       'I confirm written Rules of Engagement (RoE) and authorization for these targets',
+    roeId: 'RoE document ID',
+    roeIdPlaceholder: 'e.g. ROE-2026-041 / ticket / signed PDF ref',
     roeHint:
-      'Required before enqueue. Production rejects lab_mode bypass. Unauthorized scanning is prohibited.',
+      'Required before enqueue. Production rejects lab_mode bypass. Store RoE ID for evidence. Unauthorized scanning is prohibited.',
     roeAckAuthNote:
       'Authenticated VA still requires the RoE checkbox above before start.',
     authType: 'Auth type',
@@ -291,13 +302,13 @@ const en = {
     engagementApproved: 'Engagement scope approved for client delivery (dual control).',
     engagementApproveFailed: 'Failed to approve engagement delivery',
     engagementClientHint:
-      'Requires admin/lead dual-control approval for the current scan/asset scope.',
+      'Requires admin/lead dual-control approval. SoD: approver must differ from scan creator.',
     engagementExported: 'Downloaded VA/PT engagement draft (JSON).',
     engagementPdfExported: 'Downloaded VA/PT engagement draft (PDF).',
     engagementClientPdfExported: 'Downloaded client engagement PDF.',
     engagementFailed: 'Engagement report export failed',
     playbookHint:
-      'Playbook: Discovery → VA → confirm → remedi → retest → approve → Client PDF (+ PCI CDE).',
+      'International suite: Discovery → VA/DAST → human PT (PTES) → remedi → retest → SoD approve (≠ creator) → Client PDF. ASVS chapters tracked on engagement.',
     colSeverity: 'Severity',
     colTitle: 'Title',
     colStatus: 'Status',
@@ -625,15 +636,23 @@ const id: Messages = {
     presetZapName: 'DAST (OWASP ZAP)',
     presetMockLabTitle:
       'Hanya lab/CI — finding mock tidak bisa diekspor ke laporan engagement klien',
+    presetOpenvasTitle:
+      'Default produksi: GMP live (atur GVM_*). Mock hanya untuk lab.',
+    presetZapTitle:
+      'Suite DAST OWASP Top10 offline (lab) atau Impor JSON ZAP nyata untuk delivery klien.',
     mockLabWarningOpenvas:
-      'Mock OpenVAS hanya untuk lab/CI dan memblokir export engagement klien. Prefer GMP live atau Impor XML OpenVAS/GVM.',
+      'Mock OpenVAS mengaktifkan lab_mode dan memblokir export engagement klien. Prefer GMP live atau Impor XML OpenVAS/GVM.',
     mockLabWarningZap:
-      'Mock ZAP hanya untuk lab/CI dan memblokir export engagement klien. Prefer Impor JSON ZAP nyata (site.alerts).',
+      'Mock ZAP mengaktifkan lab_mode dan memblokir export engagement klien. Prefer Impor JSON ZAP nyata (site.alerts).',
+    prodHintOpenvas:
+      'GMP live atau Impor XML OpenVAS wajib untuk bukti siap klien. Produksi menolak mock tanpa lab_mode.',
+    prodHintZap:
+      'Gunakan Impor laporan scanner dengan JSON ZAP nyata. Produksi menolak mock tanpa lab_mode.',
     openvasMode: 'Mode OpenVAS',
-    openvasModeMock: 'mock — laporan GVM sintetis (lab/CI saja)',
+    openvasModeMock: 'mock — laporan GVM sintetis (lab/CI saja; set lab_mode)',
     openvasModeGmp: 'gmp — Greenbone live (isi GVM_* di .env)',
     openvasModeHint:
-      'Perlu GVM_USERNAME/PASSWORD dan GVM_SOCKET atau GVM_HOST. Lihat docs/greenbone-gvm.md.',
+      'Perlu GVM_USERNAME/PASSWORD dan GVM_SOCKET atau GVM_HOST. Lihat docs/greenbone-gvm.md. Default mengikuti OPENVAS_MODE (disarankan gmp).',
     openvasCatalogs: 'Katalog mock (tanpa kredensial)',
     openvasCatalogWeb: 'webserver',
     openvasCatalogDb: 'dbserver',
@@ -641,17 +660,20 @@ const id: Messages = {
     openvasCatalogHint:
       'Finding sintetis untuk web / DB / app server tanpa kredensial. Diabaikan di mode gmp bila GVM live terkonfigurasi.',
     zapMode: 'Mode ZAP',
-    zapModeMock: 'mock — alert ZAP JSON sintetis (lab/CI saja)',
+    zapModeImport: 'import — pakai Impor laporan scanner (report_json)',
+    zapModeMock: 'mock — alert ZAP JSON sintetis (lab/CI saja; set lab_mode)',
     zapModeHint:
-      'Alert DAST mock tanpa daemon ZAP live — bukan untuk delivery klien. Impor JSON ZAP nyata lewat Impor laporan scanner di bawah.',
+      'Impor JSON ZAP nyata lewat Impor laporan scanner. Mock DAST bukan untuk delivery klien.',
     zapPolicy: 'Kebijakan ZAP',
     authenticatedVa: 'VA terautentikasi (berkredensial)',
     roeAck:
       'Saya mengonfirmasi Rules of Engagement / izin tertulis untuk scan berkredensial pada aset ini.',
     roeAckRequired:
       'Saya mengonfirmasi Rules of Engagement (RoE) dan otorisasi tertulis untuk target ini',
+    roeId: 'ID dokumen RoE',
+    roeIdPlaceholder: 'mis. ROE-2026-041 / tiket / ref PDF bertanda tangan',
     roeHint:
-      'Wajib sebelum enqueue. Produksi menolak bypass lab_mode. Scan tanpa izin dilarang.',
+      'Wajib sebelum enqueue. Produksi menolak bypass lab_mode. Simpan ID RoE sebagai bukti. Scan tanpa izin dilarang.',
     roeAckAuthNote:
       'VA terautentikasi tetap membutuhkan centang RoE di atas sebelum start.',
     authType: 'Tipe auth',
@@ -776,13 +798,13 @@ const id: Messages = {
       'Scope engagement disetujui untuk delivery klien (dual control).',
     engagementApproveFailed: 'Gagal menyetujui delivery engagement',
     engagementClientHint:
-      'Memerlukan persetujuan dual-control admin/lead untuk scope scan/aset aktif.',
+      'Memerlukan dual-control admin/lead. SoD: pemberi approve ≠ pembuat scan.',
     engagementExported: 'Draft engagement VA/PT (JSON) diunduh.',
     engagementPdfExported: 'Draft engagement VA/PT (PDF) diunduh.',
     engagementClientPdfExported: 'PDF engagement klien diunduh.',
     engagementFailed: 'Ekspor laporan engagement gagal',
     playbookHint:
-      'Playbook: Discovery → VA → confirm → remedi → retest → approve → PDF Klien (+ PCI CDE).',
+      'Suite internasional: Discovery → VA/DAST → PT manusia (PTES) → remedi → retest → SoD approve (≠ pembuat) → PDF Klien. Bab ASVS dilacak di engagement.',
     colSeverity: 'Keparahan',
     colTitle: 'Judul',
     colStatus: 'Status',

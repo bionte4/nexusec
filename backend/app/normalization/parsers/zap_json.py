@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from app.core.enums import Severity
 from app.normalization.base import FindingParser, RawInput
 from app.normalization.schema import NormalizedFinding
+from app.services.engagement_standards import map_owasp_category
 
 _RISK_MAP = {
     "0": Severity.INFO,
@@ -115,13 +116,18 @@ class ZapJsonParser(FindingParser):
                     affected_component=(path or uri or host or None),
                     target_hint=host or None,
                     remediation_steps=solution,
-                    owasp_category="A05:2021",
+                    owasp_category=map_owasp_category(
+                        title=title,
+                        cwe_id=cwe_id,
+                        explicit=str(alert.get("owasp") or "") or None,
+                    ),
                     evidence={
                         "zap": {
                             "pluginid": plugin,
                             "riskcode": riskcode,
                             "uri": uri,
                             "method": inst.get("method"),
+                            "owasp": alert.get("owasp"),
                         }
                     },
                     source_tool="zap",

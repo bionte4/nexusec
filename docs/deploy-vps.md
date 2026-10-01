@@ -115,8 +115,10 @@ AI_REMEDIATION_FALLBACK_MOCK=false
 AI_FP_FALLBACK_MOCK=false
 AI_SOC_CHAT_FALLBACK_MOCK=false
 
-# Scanner: OpenVAS/ZAP mock = lab saja. Produksi VA: nmap/nuclei + Import ZAP/OpenVAS nyata.
-OPENVAS_MODE=mock
+# Scanner: OpenVAS/ZAP mock = lab saja. Produksi VA: nmap/nuclei + GMP/Import.
+OPENVAS_MODE=gmp
+ZAP_MODE=import
+OPENVAS_GMP_FALLBACK_MOCK=false
 ```
 
 Referensi lengkap variabel: [`.env.example`](../.env.example) (bagian `# --- Rate limiting` dan `# --- Scanner SSRF`).
@@ -246,10 +248,12 @@ User pertama menjadi Super Admin.
    - Prefer **Nmap / Nuclei** atau **Import** ZAP JSON / OpenVAS XML.
    - Mock ZAP/OpenVAS = lab saja (memblokir Client PDF).
 4. Centang **RoE** sebelum start scan / pipeline.
-5. Alur laporan (P2/P3):
+5. Alur laporan (P0–P3):
+   - Prefer **Nmap / Nuclei** + **Import** ZAP/OpenVAS; mock hanya lab (`lab_mode`).
+   - Isi **RoE** (+ opsional RoE ID) sebelum start.
    - **Vulnerabilities** → Draft PDF (internal).
-   - Admin → **Approve client** (dual control).
-   - **Client PDF** (`delivery=client`).
+   - Admin lain (bukan creator scan) → **Approve client** (SoD).
+   - **Client PDF** (`delivery=client`) — berisi playbook + PTES/ASVS.
    - PCI report default **CDE-only**.
 
 Detail AI: [`ai-integration.md`](ai-integration.md). VA/PT: [`usage-va-pt.md`](usage-va-pt.md).

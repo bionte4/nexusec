@@ -154,7 +154,10 @@ async def test_client_delivery_blocked_without_approval() -> None:
     assert report.delivery == "draft"
     assert report.classification.startswith("Internal Draft")
     assert report.playbook.heading.startswith("PT/VA playbook")
+    assert report.ptes_checklist.heading.startswith("PTES")
+    assert report.asvs_checklist.heading.startswith("OWASP ASVS")
     assert report.dual_control["approved"] is False
+    assert report.dual_control.get("sod")
     pdf = render_engagement_pdf(report)
     assert pdf[:4] == b"%PDF"
 

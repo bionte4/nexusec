@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import UserRole
 from app.models.engagement_approval import EngagementApproval
+from app.models.scan import Scan
 from app.models.user import User
 from app.services.audit_service import AuditService
 
@@ -42,6 +43,22 @@ class EngagementApprovalService:
                 "Only admin or super_admin may approve client engagement delivery "
                 "(dual control)."
             )
+        if scan_id is not None:
+            scan = (
+                await self.db.execute(
+                    select(Scan).where(
+                        Scan.id == scan_id,
+                        Scan.organization_id == organization_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if scan is None:
+                raise EngagementApprovalError("Scan not found for engagement approval scope.")
+            if scan.created_by_id is not None and scan.created_by_id == actor.id:
+                raise EngagementApprovalError(
+                    "Separation of duties: the scan creator cannot approve client "
+                    "delivery for the same engagement (approver ≠ creator)."
+                )
         # Revoke prior active approvals for the same scope fingerprint
         existing = await self.find_active(
             organization_id=organization_id,

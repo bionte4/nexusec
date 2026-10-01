@@ -39,6 +39,37 @@ class ExecutionResult:
     stdout: str
     stderr: str
     timed_out: bool = False
+    tool_version: Optional[str] = None
+    template_hash: Optional[str] = None
+
+
+def probe_cli_version(
+    binary: str,
+    version_args: Sequence[str] = ("--version",),
+    *,
+    timeout_seconds: float = 5.0,
+) -> Optional[str]:
+    """Best-effort CLI version string for scan evidence (never raises)."""
+    try:
+        resolved = SecureExecutor().resolve_binary(binary)
+    except ToolExecutionError:
+        return None
+    try:
+        completed = subprocess.run(  # noqa: S603
+            [resolved, *list(version_args)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+            shell=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    blob = (completed.stdout or completed.stderr or "").strip()
+    if not blob:
+        return None
+    first = blob.splitlines()[0].strip()
+    return first[:200] if first else None
 
 
 @dataclass

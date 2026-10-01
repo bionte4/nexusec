@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.enums import ScanStatus, ScanType, ScannerEngine
 from app.models.scan import Scan, ScanAsset
-from app.services.scan_policy import assert_roe_for_scan
+from app.services.scan_policy import assert_roe_for_scan, assert_production_scanner_config
 from app.services.scan_service import (
     ScanService,
     ScanValidationError,
@@ -23,6 +23,7 @@ _VA_ENGINES = frozenset(
         ScannerEngine.NUCLEI,
         ScannerEngine.NEXUSEC,
         ScannerEngine.OPENVAS,
+        # ZAP is import-first for production VA; live daemon not enabled.
         ScannerEngine.ZAP,
     }
 )
@@ -33,6 +34,7 @@ class PipelineCreateError(Exception):
 
 
 def default_va_config(engine: ScannerEngine) -> dict[str, Any]:
+    """Sensible VA defaults. Production prefers live/import — not mock."""
     if engine == ScannerEngine.NUCLEI:
         return {
             "severity": ["critical", "high", "medium"],
@@ -48,13 +50,23 @@ def default_va_config(engine: ScannerEngine) -> dict[str, Any]:
             ],
         }
     if engine == ScannerEngine.OPENVAS:
+        # Prefer live GMP; mock only with explicit lab_mode (blocked in prod otherwise).
         return {
-            "openvas_mode": "mock",
+            "openvas_mode": "gmp",
             "openvas_catalogs": ["webserver", "dbserver", "appserver"],
         }
     if engine == ScannerEngine.ZAP:
-        return {"zap_mode": "mock", "zap_policy": "baseline"}
+        # Import-first: set report_json via Import UI, or lab_mode+mock for demos.
+        return {"zap_mode": "import", "zap_policy": "baseline"}
     return {}
+
+
+def _zap_pipeline_ready(cfg: dict[str, Any]) -> bool:
+    if cfg.get("lab_mode") is True:
+        return True
+    if isinstance(cfg.get("report_json"), str) and cfg["report_json"].strip():
+        return True
+    return False
 
 
 class ScanPipelineService:
@@ -92,9 +104,17 @@ class ScanPipelineService:
         va_cfg = {**default_va_config(va_engine), **(va_config or {})}
         try:
             assert_roe_for_scan(va_cfg, settings=get_settings())
+            assert_production_scanner_config(
+                va_engine, va_cfg, settings=get_settings()
+            )
         except ValueError as exc:
             raise ScanValidationError(str(exc)) from exc
 
+        if va_engine == ScannerEngine.ZAP and not _zap_pipeline_ready(va_cfg):
+            raise ScanValidationError(
+                "Pipeline ZAP requires imported report_json or lab_mode=true. "
+                "Prefer VA engine nuclei, or use Import scanner report for ZAP JSON."
+            )
         roe_flags = {
             "roe_acknowledged": bool(va_cfg.get("roe_acknowledged") is True),
             "lab_mode": bool(va_cfg.get("lab_mode") is True),

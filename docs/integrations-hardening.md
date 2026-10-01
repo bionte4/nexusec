@@ -23,10 +23,12 @@ Lihat panduan penuh kartu engine: [`scanner-connectors.md`](scanner-connectors.m
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `OPENVAS_MODE` | `mock` | Synthetic GVM XML for labs/CI without Greenbone |
+| `OPENVAS_MODE` | `gmp` | Live Greenbone; use `mock` only with `lab_mode` in production |
 | — | — | Or pass `config.report_xml` on the scan to import a real report |
+| `OPENVAS_GMP_FALLBACK_MOCK` | `false` | Ignored in production (refuse silent mock) |
+| `ZAP_MODE` | `import` | Requires `report_json` / Import UI; `mock` needs `lab_mode` in production |
 
-Live `gmp` mode requires `gvm-cli` + a configured appliance; otherwise the worker falls back to mock or fails closed with a clear error.
+Live `gmp` mode requires `python-gvm` + a configured appliance; without credentials the worker fails closed (no silent mock in production).
 
 ## Hardening checklist (ops)
 
@@ -41,6 +43,8 @@ Live `gmp` mode requires `gvm-cli` + a configured appliance; otherwise the worke
 7. AI API keys in `platform_settings` are sealed at rest (`enc:v1:…` via SECRET_KEY).
 8. Disable unused AI/ticket/SIEM integrations in production until keys are rotated and scoped.
 9. Prefer mock OpenVAS/ZAP only in shared demos; production VA uses nmap/nuclei + **import** real ZAP/OpenVAS reports.
-10. Engagement **Client PDF** requires dual-control admin approval (`delivery=client`); drafts do not.
-11. PCI-DSS reports default to **CDE-only** (`is_cde_scope` assets).
-12. Production VPS: bind API/UI to `127.0.0.1`, terminate TLS at Nginx, open only 22/80/443 — see [`deploy-vps.md`](deploy-vps.md).
+10. Engagement **Client PDF** requires dual-control admin approval (`delivery=client`) with **SoD: approver ≠ scan creator**; drafts do not.
+11. Record `roe_id` + Nuclei `template_hash` / `tool_version` on scan evidence; refresh Nuclei pins quarterly (`NUCLEI_VERSION` / `NUCLEI_TEMPLATES_REF`).
+12. Engagement reports include **PTES** + **ASVS L1** checklists; exploitation remains human-led (no auto-exploit).
+13. PCI-DSS reports default to **CDE-only** (`is_cde_scope` assets).
+14. Production VPS: bind API/UI to `127.0.0.1`, terminate TLS at Nginx, open only 22/80/443 — see [`deploy-vps.md`](deploy-vps.md).

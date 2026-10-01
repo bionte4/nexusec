@@ -84,6 +84,9 @@ class EngagementScanInfo(BaseModel):
     completed_at: Optional[datetime] = None
     asset_names: list[str] = Field(default_factory=list)
     roe_notes: Optional[str] = None
+    roe_id: Optional[str] = None
+    tool_version: Optional[str] = None
+    template_hash: Optional[str] = None
 
 
 class EngagementFindingRow(BaseModel):
@@ -133,6 +136,8 @@ class EngagementReport(BaseModel):
     methodology: ReportSection
     limitations: ReportSection
     playbook: ReportSection
+    ptes_checklist: ReportSection
+    asvs_checklist: ReportSection
     severity_summary: dict[str, int] = Field(default_factory=dict)
     status_summary: dict[str, int] = Field(default_factory=dict)
     scans: list[EngagementScanInfo] = Field(default_factory=list)

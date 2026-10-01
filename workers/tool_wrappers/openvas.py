@@ -23,7 +23,7 @@ from workers.tool_wrappers.validators import TargetValidationError, validate_tar
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OPENVAS_MODE = "mock"
+DEFAULT_OPENVAS_MODE = "gmp"
 
 
 # Mock finding catalogs for unauthenticated VA demos (no credentials).
@@ -277,6 +277,7 @@ class OpenVasScanRequest:
     tags: Sequence[str] = field(default_factory=list)
     # Mock-only: which finding catalogs to emit (webserver | dbserver | appserver).
     catalogs: Sequence[str] = field(default_factory=lambda: list(DEFAULT_MOCK_CATALOGS))
+    lab_mode: bool = False
 
 
 @dataclass(frozen=True)
@@ -356,7 +357,18 @@ class OpenVasWrapper:
                 timeout_seconds=request.timeout_seconds,
                 catalogs=request.catalogs,
             )
-        return self._run_mock(targets, catalogs=request.catalogs)
+        if mode in {"mock", "", "default"}:
+            app_env = (os.getenv("APP_ENV") or "").lower()
+            if app_env in {"production", "prod"} and not request.lab_mode:
+                raise ToolExecutionError(
+                    "OpenVAS mock is refused in production. Use openvas_mode=gmp "
+                    "with GVM_* credentials, Import OpenVAS XML, or enqueue with "
+                    "lab_mode=true for demos only."
+                )
+            return self._run_mock(targets, catalogs=request.catalogs)
+        raise ToolExecutionError(
+            f"Unsupported openvas_mode={mode!r} (use gmp, mock+lab_mode, or report_xml)"
+        )
 
     def _run_mock(
         self,
@@ -389,6 +401,12 @@ class OpenVasWrapper:
                 "GVM_SOCKET or GVM_HOST (see docs/greenbone-gvm.md)"
             )
             if self.gvm.fallback_mock:
+                app_env = (os.getenv("APP_ENV") or "").lower()
+                if app_env in {"production", "prod"}:
+                    raise ToolExecutionError(
+                        f"{msg}; OPENVAS_GMP_FALLBACK_MOCK is ignored in production "
+                        "(refuse silent mock). Configure GVM_* or use Import OpenVAS XML."
+                    )
                 result = self._run_mock(targets, catalogs=catalogs)
                 return ExecutionResult(
                     command=result.command,
@@ -409,7 +427,14 @@ class OpenVasWrapper:
         except Exception as exc:  # noqa: BLE001 — surface as tool error to Celery
             logger.exception("GMP scan failed")
             if self.gvm.fallback_mock:
-                result = self._run_mock(targets)
+                app_env = (os.getenv("APP_ENV") or "").lower()
+                if app_env in {"production", "prod"}:
+                    raise ToolExecutionError(
+                        f"Greenbone GMP scan failed: {exc}; "
+                        "OPENVAS_GMP_FALLBACK_MOCK is ignored in production "
+                        "(refuse silent mock). Fix GVM connectivity or Import OpenVAS XML."
+                    ) from exc
+                result = self._run_mock(targets, catalogs=catalogs)
                 return ExecutionResult(
                     command=result.command,
                     returncode=0,

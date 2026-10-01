@@ -239,6 +239,14 @@ async def get_scan_evidence(
         "truncated": bool(result.get("truncated")),
         "finished_at": result.get("finished_at"),
         "ingest": result.get("ingest"),
+        "tool_version": result.get("tool_version"),
+        "template_hash": result.get("template_hash")
+        or (scan.config or {}).get("template_hash"),
+        "roe_id": (scan.config or {}).get("roe_id")
+        or (scan.config or {}).get("roe_document_id"),
+        "roe_acknowledged": (scan.config or {}).get("roe_acknowledged") is True,
+        "lab_mode": (scan.config or {}).get("lab_mode") is True,
+        "imported": (scan.config or {}).get("imported") is True,
         "stderr": stderr[:10_000],
         "stdout_preview": stdout[:max_preview],
         "stdout_truncated": len(stdout) > max_preview,

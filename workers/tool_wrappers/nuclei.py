@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional, Sequence
 from urllib.parse import urlparse
 
@@ -12,6 +14,7 @@ from workers.tool_wrappers.base import (
     ResourceLimits,
     SecureExecutor,
     ToolExecutionError,
+    probe_cli_version,
 )
 from workers.tool_wrappers.validators import TargetValidationError, validate_target
 
@@ -52,6 +55,24 @@ class NucleiScanRequest:
     template_dirs: Sequence[str] = field(default_factory=tuple)
     # Authenticated VA: list of (Header-Name, value) for nuclei -H
     headers: Sequence[tuple[str, str]] = field(default_factory=tuple)
+
+
+def _hash_template_dirs(dirs: Sequence[str]) -> Optional[str]:
+    parts: list[str] = []
+    for raw in dirs:
+        path = Path(raw)
+        try:
+            if path.is_dir():
+                names = sorted(p.name for p in path.iterdir())[:50]
+                mtime = int(path.stat().st_mtime)
+                parts.append(f"{path}:{mtime}:{','.join(names)}")
+            else:
+                parts.append(f"{path}:missing")
+        except OSError:
+            parts.append(f"{path}:error")
+    if not parts:
+        return None
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 def validate_nuclei_target(value: str) -> str:
@@ -218,8 +239,25 @@ class NucleiWrapper:
             "HOME": "/tmp",
             "DISABLE_UPDATE_CHECK": "true",
         }
-        return self.executor.run(
+        version = probe_cli_version(self.binary, ("-version",))
+        try:
+            template_dirs = _resolve_template_dirs(request)
+        except ToolExecutionError:
+            template_dirs = []
+        template_hash = _hash_template_dirs(template_dirs) if template_dirs else None
+        result = self.executor.run(
             argv,
             timeout_seconds=request.timeout_seconds,
             env=env,
+        )
+        if version is None and template_hash is None:
+            return result
+        return ExecutionResult(
+            command=result.command,
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            timed_out=result.timed_out,
+            tool_version=version,
+            template_hash=template_hash,
         )

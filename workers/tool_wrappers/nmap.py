@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-from workers.tool_wrappers.base import ExecutionResult, SecureExecutor, ToolExecutionError
+from workers.tool_wrappers.base import (
+    ExecutionResult,
+    SecureExecutor,
+    ToolExecutionError,
+    probe_cli_version,
+)
 from workers.tool_wrappers.validators import TargetValidationError, validate_targets
 
 # Only these flags may be requested by callers (no free-form user argv).
@@ -126,4 +131,15 @@ class NmapWrapper:
 
     def run(self, request: NmapScanRequest) -> ExecutionResult:
         argv = self.build_argv(request)
-        return self.executor.run(argv, timeout_seconds=request.timeout_seconds)
+        version = probe_cli_version(self.binary, ("--version",))
+        result = self.executor.run(argv, timeout_seconds=request.timeout_seconds)
+        if version is None:
+            return result
+        return ExecutionResult(
+            command=result.command,
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            timed_out=result.timed_out,
+            tool_version=version,
+        )

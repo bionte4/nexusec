@@ -15,8 +15,8 @@ Di halaman **Scans**, bagian atas form menampilkan kartu engine siap pakai:
 | **Nmap** | `nmap` | Ready | Discovery · port / service fingerprint |
 | **Nuclei** | `nuclei` | Ready | VA · template-driven checks |
 | **NexuSec** | `nexusec` | Ready | VA · custom async scanner |
-| **OpenVAS** | `openvas` | Ready | VA · Greenbone GVM (mock / XML) |
-| **OWASP ZAP** | `zap` | Ready | DAST · mock lab **atau** import JSON nyata |
+| **OpenVAS** | `openvas` | Ready | VA · Greenbone GVM (GMP / import; mock = lab) |
+| **OWASP ZAP** | `zap` | Ready | DAST · import JSON nyata (mock = lab) |
 
 **Cara kerja di UI**
 
@@ -57,13 +57,29 @@ UI / API  →  Scan row (status queued)
 - Target divalidasi (IP/domain/URL); tidak ada interpolasi shell.
 - Flag/opsi tool di-allowlist di wrapper.
 - Output mentah disimpan di `scan.config.last_result` (dipotong bila terlalu besar).
+- Nmap/Nuclei menyimpan `tool_version` di `last_result` (dari `nmap --version` / `nuclei -version`) sebagai bukti versi tool per job.
 - Finding masuk skema tunggal + tag compliance (ISO / PCI-DSS / GDPR / NIST) saat enrich.
 
 **Health**
 
-`GET /api/v1/health/detailed` melaporkan ketersediaan binary (`nmap`, `nuclei`), status connector OpenVAS / ZAP (`mode` mock), dan status LLM (`ai` check — key set vs mock fallback, tanpa mengekspos secret).
+`GET /api/v1/health/detailed` melaporkan ketersediaan binary (`nmap`, `nuclei`), status connector OpenVAS / ZAP, dan status LLM (`ai` check — key set vs mock fallback, tanpa mengekspos secret).
 
 `GET /api/v1/health/workers` menambahkan `tools.zap` (mode + path binary bila ada).
+
+### Cadence versi tool (P0/P1 evidence)
+
+| Item | Pin / cadence | Catatan |
+|------|---------------|---------|
+| Nuclei binary | `NUCLEI_VERSION=3.3.9` di `infra/docker/Dockerfile.scanner` | Review **kuartalan** atau setelah CVE toolchain |
+| Nuclei templates | `NUCLEI_TEMPLATES_REF=v10.1.1` → `/opt/nuclei-templates` | Update terjadwal (mingguan lab / change-window prod); **jangan** `nuclei -update` otomatis di prod |
+| Bukti per scan | Otomatis | `last_result.tool_version` (nmap/nuclei) + `last_result.template_hash` (nuclei packs) + `config.roe_id` |
+| Evidence API | `GET /api/v1/scans/{id}/evidence` | Mengekspos `tool_version`, `template_hash`, `roe_id`, `lab_mode`, `imported` |
+
+Produksi menolak enqueue OpenVAS/ZAP **mock** kecuali `lab_mode=true` (Client PDF tetap diblok untuk bukti sintetis).
+
+**Offline DAST internasional (tanpa zaproxy):** `zap_mode=mock` + `zap_policy=owasp_top10` (+ `lab_mode` di prod) menghasilkan suite alert OWASP Top 10:2021 yang di-parse ke finding dengan `owasp_category` A01–A10. Untuk client delivery: Import JSON ZAP nyata.
+
+**Proses manusia (PTES/ASVS + SoD):** engagement report menyertakan checklist PTES & ASVS L1; approve Client PDF menolak jika `approver == scan.created_by` (separation of duties).
 
 ---
 
@@ -262,8 +278,10 @@ Atur lewat `config.openvas_catalogs` (default: ketiga katalog).
 - Prefill:
 
 ```json
-{ "openvas_mode": "mock", "openvas_catalogs": ["webserver", "dbserver", "appserver"] }
+{ "openvas_mode": "gmp", "openvas_catalogs": ["webserver", "dbserver", "appserver"] }
 ```
+
+Mock lab: `{ "openvas_mode": "mock", "lab_mode": true, "openvas_catalogs": [...] }`.
 
 ### 6.3 Mode operasi
 
@@ -271,9 +289,9 @@ Lihat panduan live: [`greenbone-gvm.md`](greenbone-gvm.md).
 
 | Mode | Env / config | Perilaku |
 |------|--------------|----------|
-| **mock** (default) | `OPENVAS_MODE=mock` di `.env` **atau** `config.openvas_mode=mock` di form Scans | Generate XML GVM-like untuk tiap target tervalidasi |
+| **gmp** (default) | `OPENVAS_MODE=gmp` **atau** `config.openvas_mode=gmp` + `GVM_*` | Live scan lewat `python-gvm`; tanpa kredensial → error (`OPENVAS_GMP_FALLBACK_MOCK` diabaikan di production) |
 | **import** | `config.report_xml` | Parse laporan XML nyata tanpa menjalankan GVM |
-| **gmp** | `OPENVAS_MODE=gmp` **atau** pilih **gmp** di UI + `GVM_USERNAME`/`GVM_PASSWORD` + `GVM_SOCKET` atau `GVM_HOST` | Live scan lewat `python-gvm`; tanpa kredensial → error (atau mock jika `OPENVAS_GMP_FALLBACK_MOCK=true`) |
+| **mock** (lab) | `openvas_mode=mock` + `lab_mode=true` di production | Generate XML GVM-like; memblokir Client engagement PDF |
 
 Di UI Scans, saat engine **openvas** dipilih, dropdown **OpenVAS mode** mengatur `config.openvas_mode` per job (menimpa default env).
 
@@ -331,22 +349,24 @@ POST /api/v1/normalize/preview
 
 ---
 
-## 6b. OWASP ZAP — DAST · web baseline (mock JSON)
+## 6b. OWASP ZAP — DAST · web baseline (import / mock lab)
 
 ### Tujuan
 
-DAST ringan untuk aset URL/HTTP. Default **mock** menghasilkan alert JSON gaya ZAP (XSS, missing headers, dll.) tanpa daemon `zaproxy` — **lab/CI saja** (memblokir engagement export klien). Untuk delivery: **Import raw** `POST /api/v1/scans/import-report` dengan engine `zap` (JSON `site.alerts`), atau config `report_json` pada job.
+DAST untuk aset URL/HTTP. **Default produksi: import** — `POST /api/v1/scans/import-report` (engine `zap`, JSON `site.alerts`) atau `config.report_json`. Mode **mock** menghasilkan alert sintetis tanpa daemon `zaproxy` — **lab/CI saja** (`lab_mode=true` wajib di production; memblokir Client PDF).
 
-### Config tipikal
+### Config tipikal (produksi)
 
 ```json
 {
-  "zap_mode": "mock",
+  "zap_mode": "import",
   "zap_policy": "baseline"
 }
 ```
 
-Env: `ZAP_MODE=mock` (default). Mode `daemon` belum diaktifkan di build ini.
+Lalu isi bukti lewat **Import scanner report**. Lab: `{ "zap_mode": "mock", "lab_mode": true, "zap_policy": "baseline" }`.
+
+Env: `ZAP_MODE=import` (default). Mode `daemon` belum diaktifkan di build ini.
 
 ### Worker
 
@@ -433,7 +453,7 @@ GET /api/v1/scans/{scan_id}/compare-engines
 | Scan stuck `queued` | `scanner-worker` tidak jalan | `docker compose up -d scanner-worker` |
 | Nuclei: *failed to create new OS thread* | `pids_limit` / concurrency terlalu tinggi | Rebuild stack terbaru; pakai preset VA nuclei (`-c`/`bulk-size` 10) |
 | Nuclei: *Binary not found* | Image worker tanpa nuclei | Pakai image `Dockerfile.scanner`, bukan worker generik |
-| OpenVAS 0 finding | XML kosong / mode gmp tanpa appliance | Set `openvas_mode=mock` atau isi `report_xml` |
+| OpenVAS 0 finding | XML kosong / mode gmp tanpa appliance | Konfigurasi GVM_* atau isi `report_xml`; mock hanya lab + `lab_mode` |
 | Finding kosong padahal completed | Parser mismatch / target unmatched | Cek `config.last_result.ingest` & `normalize/preview` |
 | Judul “Discovery (nmap)” tapi engine nuclei | Nama job bebas diedit user | Percayai field `engine` di metadata baris scan, bukan judul saja |
 | `Organization scope required` | Super-admin tanpa header | Kirim `X-Organization-Id` |

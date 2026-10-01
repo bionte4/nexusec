@@ -53,16 +53,44 @@ def is_mock_scan_config(engine: ScannerEngine | str, config: dict[str, Any] | No
     if cfg.get("imported") is True:
         return False
     if eng == "zap":
-        mode = str(cfg.get("zap_mode") or cfg.get("mode") or "mock").lower()
+        mode = str(cfg.get("zap_mode") or cfg.get("mode") or "import").lower()
         if isinstance(cfg.get("report_json"), str) and cfg["report_json"].strip():
             return False
-        return mode in {"mock", "", "default"}
+        return mode in {"mock", "default"}
     if eng == "openvas":
         if isinstance(cfg.get("report_xml"), str) and cfg["report_xml"].strip():
             return False
-        mode = str(cfg.get("openvas_mode") or cfg.get("mode") or "mock").lower()
-        return mode in {"mock", "", "default"}
+        mode = str(cfg.get("openvas_mode") or cfg.get("mode") or "gmp").lower()
+        return mode in {"mock", "default"}
     return False
+
+
+def assert_production_scanner_config(
+    engine: ScannerEngine | str,
+    config: dict[str, Any] | None,
+    *,
+    settings: Optional[Settings] = None,
+) -> None:
+    """Block mock OpenVAS/ZAP enqueue in production unless explicit lab_mode.
+
+    Production VA must use nmap/nuclei, OpenVAS GMP, or imported real reports.
+    ``lab_mode=true`` still allows mock for demos, but client engagement PDF
+    remains blocked by ``assert_engagement_export_allowed``.
+    """
+    settings = settings or get_settings()
+    if not is_production_env(settings):
+        return
+    cfg = config if isinstance(config, dict) else {}
+    if not is_mock_scan_config(engine, cfg):
+        return
+    if cfg.get("lab_mode") is True:
+        return
+    eng = engine.value if isinstance(engine, ScannerEngine) else str(engine).lower()
+    raise ValueError(
+        f"Production refuses mock {eng} scans. Use nmap/nuclei, OpenVAS GMP "
+        f"(openvas_mode=gmp), Import scanner report, or set lab_mode=true for demos only "
+        f"(Client PDF still blocked for mock evidence)."
+    )
 
 
 def is_synthetic_finding(vuln: Vulnerability) -> bool:

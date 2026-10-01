@@ -1,6 +1,6 @@
-"""OWASP ZAP connector wrapper — mock JSON alerts for lab/CI DAST VA.
+"""OWASP ZAP connector wrapper — import real JSON or mock alerts for lab/CI DAST.
 
-Live ZAP daemon (zaproxy API) can be added later; mock keeps demos offline.
+Live ZAP daemon (zaproxy API) can be added later; production defaults to import.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any, Optional, Sequence
 from workers.tool_wrappers.base import ExecutionResult, ToolExecutionError
 from workers.tool_wrappers.validators import TargetValidationError, validate_target
 
-DEFAULT_ZAP_MODE = "mock"
+DEFAULT_ZAP_MODE = "import"
 
 
 @dataclass
@@ -25,6 +25,7 @@ class ZapScanRequest:
     report_json: Optional[str] = None
     # spider | active (mock labels only)
     scan_policy: str = "baseline"
+    lab_mode: bool = False
 
 
 def _risk_for(name: str) -> tuple[str, str, str]:
@@ -42,7 +43,28 @@ def _risk_for(name: str) -> tuple[str, str, str]:
 
 
 def build_mock_zap_report(targets: list[str], *, policy: str = "baseline") -> str:
-    """Deterministic ZAP-like JSON (site + alerts) for normalization demos."""
+    """Deterministic ZAP-like JSON (site + alerts) for normalization demos.
+
+    ``policy=owasp_top10`` (or ``asvs`` / ``international``) emits the offline
+    OWASP Top 10:2021 DAST suite — no external zaproxy required.
+    """
+    pol = (policy or "baseline").lower()
+    if pol in {"owasp_top10", "owasp", "asvs", "international", "top10"}:
+        try:
+            from app.services.engagement_standards import build_offline_owasp_dast_report
+
+            return build_offline_owasp_dast_report(targets, policy=pol)
+        except ImportError:
+            import sys
+            from pathlib import Path
+
+            root = Path(__file__).resolve().parents[2]
+            if str(root) not in sys.path:
+                sys.path.insert(0, str(root))
+            from app.services.engagement_standards import build_offline_owasp_dast_report
+
+            return build_offline_owasp_dast_report(targets, policy=pol)
+
     now = datetime.now(timezone.utc).isoformat()
     baseline_alerts = [
         "Missing Anti-clickjacking Header",
@@ -56,11 +78,11 @@ def build_mock_zap_report(targets: list[str], *, policy: str = "baseline") -> st
         "Cross Site Scripting (Reflected)",
     ]
     names = list(baseline_alerts)
-    if policy.lower() in {"active", "full", "attack"}:
+    if pol in {"active", "full", "attack"}:
         names.extend(active_extra)
 
     sites: list[dict[str, Any]] = []
-    for idx, raw in enumerate(targets):
+    for raw in targets:
         host = raw
         if "://" in raw:
             from urllib.parse import urlparse
@@ -144,18 +166,32 @@ class ZapWrapper:
             raise ToolExecutionError("No valid ZAP targets")
 
         mode = (request.mode or self.mode).lower()
-        if mode not in {"mock", "import"}:
-            # Future: live zaproxy API — fail closed to mock-only for now
-            if mode == "daemon":
-                raise ToolExecutionError(
-                    "ZAP daemon mode is not enabled in this build; use mode=mock or report_json import"
-                )
-            mode = "mock"
+        if mode == "import" and not (request.report_json and str(request.report_json).strip()):
+            raise ToolExecutionError(
+                "zap_mode=import requires report_json (use Import scanner report). "
+                "For lab demos use zap_mode=mock with lab_mode=true."
+            )
+        if mode == "daemon":
+            raise ToolExecutionError(
+                "ZAP daemon mode is not enabled in this build; "
+                "use Import ZAP JSON or zap_mode=mock with lab_mode=true"
+            )
+        if mode not in {"mock", "", "default"}:
+            raise ToolExecutionError(
+                f"Unsupported zap_mode={mode!r} (use import+report_json or mock+lab_mode)"
+            )
 
-        xml = build_mock_zap_report(targets, policy=request.scan_policy)
+        app_env = (os.getenv("APP_ENV") or "").lower()
+        if app_env in {"production", "prod"} and not request.lab_mode:
+            raise ToolExecutionError(
+                "ZAP mock is refused in production. Import real ZAP JSON via "
+                "Import scanner report, or enqueue with lab_mode=true for demos only."
+            )
+
+        payload = build_mock_zap_report(targets, policy=request.scan_policy)
         return ExecutionResult(
             command=("zap", "mock", request.scan_policy, *targets),
             returncode=0,
-            stdout=xml,
+            stdout=payload,
             stderr=f"zap mock connector: generated synthetic DAST report (policy={request.scan_policy})",
         )

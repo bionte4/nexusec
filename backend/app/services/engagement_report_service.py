@@ -30,6 +30,12 @@ from app.schemas.reports import (
     VerificationRow,
 )
 from app.services.audit_service import AuditService
+from app.services.engagement_standards import (
+    build_asvs_checklist,
+    build_ptes_checklist,
+    extract_scan_evidence,
+    merge_checklist_overrides_from_scans,
+)
 from app.services.scan_policy import assert_engagement_export_allowed
 
 _SEVERITY_ORDER = {
@@ -85,6 +91,10 @@ def _roe_from_config(config: dict[str, Any] | None) -> Optional[str]:
         val = config.get(key)
         if isinstance(val, str) and val.strip():
             return val.strip()
+    roe_id = config.get("roe_id") or config.get("roe_document_id")
+    if isinstance(roe_id, str) and roe_id.strip():
+        ack = "acknowledged" if config.get("roe_acknowledged") is True else "referenced"
+        return f"RoE {ack}: {roe_id.strip()}"
     if config.get("roe_acknowledged") is True:
         return "RoE acknowledged for authenticated checks."
     return None
@@ -448,6 +458,7 @@ class EngagementReportService:
                 if approval_row and approval_row.approved_at
                 else None
             ),
+            "sod": "approver_must_differ_from_scan_creator",
         }
         if delivery == "draft":
             export_warnings.append(
@@ -462,6 +473,20 @@ class EngagementReportService:
             dual_control_approved=bool(approval_row),
             delivery=delivery,
         )
+        ptes_overrides, asvs_overrides = merge_checklist_overrides_from_scans(scans)
+        ptes_checklist = build_ptes_checklist(
+            scans=scans,
+            rows=rows_sorted,
+            eng_type=eng_type,
+            dual_control_approved=bool(approval_row),
+            delivery=delivery,
+            overrides=ptes_overrides,
+        )
+        asvs_checklist = build_asvs_checklist(
+            rows=rows_sorted,
+            scans=scans,
+            overrides=asvs_overrides,
+        )
         incomplete = [
             k
             for k, v in (playbook.metrics or {}).items()
@@ -472,11 +497,17 @@ class EngagementReportService:
                 "Playbook incomplete for client delivery: "
                 + ", ".join(incomplete)
             )
+        human_pending = (ptes_checklist.metrics or {}).get("human_pending") or []
+        if human_pending and delivery == "client" and eng_type == "pt":
+            export_warnings.append(
+                "PTES human phases still pending: " + ", ".join(human_pending)
+            )
 
         disclaimer = (
             f"Classification: {classification}. Delivery={delivery}. "
             "This report is generated from NexuSec orchestration data. "
-            "Human review and dual-control approval are required before client delivery. "
+            "Human review and dual-control approval (SoD: approver ≠ creator) "
+            "are required before client delivery. "
             "Only authorized targets under a written Rules of Engagement (RoE) may be assessed."
         )
         if export_warnings:
@@ -493,6 +524,8 @@ class EngagementReportService:
             methodology=methodology,
             limitations=limitations,
             playbook=playbook,
+            ptes_checklist=ptes_checklist,
+            asvs_checklist=asvs_checklist,
             severity_summary=severity_summary,
             status_summary=status_summary,
             scans=scan_infos,
@@ -786,6 +819,8 @@ class EngagementReportService:
 
     @staticmethod
     def _scan_info(scan: Scan) -> EngagementScanInfo:
+        cfg = scan.config if isinstance(scan.config, dict) else {}
+        evidence = extract_scan_evidence(cfg)
         return EngagementScanInfo(
             scan_id=scan.id,
             name=scan.name,
@@ -801,8 +836,17 @@ class EngagementReportService:
             started_at=scan.started_at,
             completed_at=scan.completed_at,
             asset_names=[a.name for a in (scan.assets or [])],
-            roe_notes=_roe_from_config(
-                scan.config if isinstance(scan.config, dict) else None
+            roe_notes=_roe_from_config(cfg),
+            roe_id=evidence.get("roe_id"),
+            tool_version=(
+                str(evidence["tool_version"])
+                if evidence.get("tool_version")
+                else None
+            ),
+            template_hash=(
+                str(evidence["template_hash"])
+                if evidence.get("template_hash")
+                else None
             ),
         )
 

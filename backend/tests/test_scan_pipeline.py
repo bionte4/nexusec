@@ -16,13 +16,13 @@ def test_default_va_config_nuclei() -> None:
 
 def test_default_va_config_openvas() -> None:
     cfg = default_va_config(ScannerEngine.OPENVAS)
-    assert cfg["openvas_mode"] == "mock"
+    assert cfg["openvas_mode"] == "gmp"
     assert set(cfg["openvas_catalogs"]) == {"webserver", "dbserver", "appserver"}
 
 
 def test_default_va_config_zap() -> None:
     cfg = default_va_config(ScannerEngine.ZAP)
-    assert cfg["zap_mode"] == "mock"
+    assert cfg["zap_mode"] == "import"
     assert cfg["zap_policy"] == "baseline"
 
 

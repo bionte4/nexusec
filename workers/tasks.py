@@ -527,6 +527,7 @@ def run_nmap_scan(self, scan_id: str) -> dict[str, Any]:
             "stderr": (result.stderr or "")[:10_000],
             "truncated": truncated,
             "finished_at": _utcnow().isoformat(),
+            "tool_version": result.tool_version,
         }
 
         if result.returncode != 0:
@@ -723,6 +724,8 @@ def run_nuclei_scan(self, scan_id: str) -> dict[str, Any]:
             "stderr": (result.stderr or "")[:10_000],
             "truncated": truncated,
             "finished_at": _utcnow().isoformat(),
+            "tool_version": result.tool_version,
+            "template_hash": result.template_hash,
         }
 
         # Nuclei returns 0 even with findings; non-zero indicates tool failure.
@@ -860,6 +863,7 @@ def run_openvas_scan(self, scan_id: str) -> dict[str, Any]:
                     mode=str(mode) if mode else None,
                     report_xml=report_xml if isinstance(report_xml, str) else None,
                     catalogs=list(catalogs) if catalogs else (),
+                    lab_mode=bool(cfg.get("lab_mode") is True),
                 )
             )
         except ToolNotFoundError as exc:
@@ -1012,6 +1016,7 @@ def run_zap_scan(self, scan_id: str) -> dict[str, Any]:
                     mode=str(mode) if mode else None,
                     report_json=report_json if isinstance(report_json, str) else None,
                     scan_policy=policy,
+                    lab_mode=bool(cfg.get("lab_mode") is True),
                 )
             )
         except ToolNotFoundError as exc:

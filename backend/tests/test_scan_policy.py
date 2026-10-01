@@ -23,6 +23,7 @@ from app.models.vulnerability import Vulnerability
 from app.services.scan_policy import (
     EngagementExportBlocked,
     assert_engagement_export_allowed,
+    assert_production_scanner_config,
     assert_roe_for_scan,
     is_mock_scan_config,
     is_synthetic_finding,
@@ -67,11 +68,47 @@ def test_zap_mock_detection() -> None:
         )
         is False
     )
+    assert is_mock_scan_config(ScannerEngine.ZAP, {}) is False  # default import
+    assert is_mock_scan_config(ScannerEngine.OPENVAS, {}) is False  # default gmp
     assert (
         is_mock_scan_config(
             ScannerEngine.OPENVAS, {"imported": True, "openvas_mode": "import"}
         )
         is False
+    )
+    assert is_mock_scan_config(ScannerEngine.OPENVAS, {"openvas_mode": "mock"}) is True
+
+
+def test_production_refuses_mock_without_lab_mode() -> None:
+    prod = Settings(app_env="production")
+    with pytest.raises(ValueError, match="refuses mock"):
+        assert_production_scanner_config(
+            ScannerEngine.ZAP,
+            {"zap_mode": "mock", "roe_acknowledged": True},
+            settings=prod,
+        )
+    with pytest.raises(ValueError, match="refuses mock"):
+        assert_production_scanner_config(
+            ScannerEngine.OPENVAS,
+            {"openvas_mode": "mock", "roe_acknowledged": True},
+            settings=prod,
+        )
+    # Explicit lab_mode allows enqueue (Client PDF still blocked separately).
+    assert_production_scanner_config(
+        ScannerEngine.ZAP,
+        {"zap_mode": "mock", "lab_mode": True, "roe_acknowledged": True},
+        settings=prod,
+    )
+    assert_production_scanner_config(
+        ScannerEngine.OPENVAS,
+        {"openvas_mode": "gmp", "roe_acknowledged": True},
+        settings=prod,
+    )
+    # Non-production does not gate.
+    assert_production_scanner_config(
+        ScannerEngine.ZAP,
+        {"zap_mode": "mock"},
+        settings=Settings(app_env="development"),
     )
 
 

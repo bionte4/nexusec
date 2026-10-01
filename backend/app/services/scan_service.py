@@ -18,7 +18,7 @@ from app.models.asset import Asset
 from app.models.scan import Scan, ScanAsset
 from app.schemas.scan import ScanCreate, ScanListResponse, ScanRead
 from app.services.audit_service import AuditService
-from app.services.scan_policy import assert_roe_for_scan
+from app.services.scan_policy import assert_production_scanner_config, assert_roe_for_scan
 
 # Allow importing Celery tasks from /workers
 _ROOT = Path(__file__).resolve().parents[3]
@@ -111,6 +111,11 @@ class ScanService:
         eng = engine or scan.engine
         try:
             assert_roe_for_scan(
+                scan.config if isinstance(scan.config, dict) else {},
+                settings=get_settings(),
+            )
+            assert_production_scanner_config(
+                eng,
                 scan.config if isinstance(scan.config, dict) else {},
                 settings=get_settings(),
             )

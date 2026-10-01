@@ -35,7 +35,7 @@ GVM_SCAN_CONFIG=Full and fast
 GVM_PORT_LIST=All IANA assigned TCP
 ```
 
-Atau biarkan `OPENVAS_MODE=mock` dan di UI Scans pilih engine **openvas** → mode **gmp** (per-scan override).
+Default produksi: `OPENVAS_MODE=gmp`. Untuk lab tanpa appliance, set `OPENVAS_MODE=mock` **dan** `lab_mode=true` pada scan (UI otomatis saat mode mock). Per-scan override: UI Scans → OpenVAS mode **gmp** / **mock**.
 
 ### Socket volume (compose)
 
@@ -79,7 +79,7 @@ Cek health: `GET /api/v1/health/detailed` → `tools.openvas.gvm_configured`.
 
 | Situasi | Setting |
 |---------|---------|
-| Demo tanpa appliance | `OPENVAS_MODE=mock` |
+| Demo tanpa appliance | `OPENVAS_MODE=mock` + `lab_mode=true` (non-client) |
 | Import laporan nyata | `config.report_xml` (mode apa pun) |
 | Live wajib gagal jelas bila GVM down | `OPENVAS_GMP_FALLBACK_MOCK=false` |
 | Live tapi izinkan fallback demo | `OPENVAS_GMP_FALLBACK_MOCK=true` |
