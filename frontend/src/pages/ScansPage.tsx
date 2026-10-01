@@ -1306,15 +1306,24 @@ export function ScansPage() {
                         {t('scans.engagementPdf')}
                       </button>
                       {canWrite &&
-                      (s.status === 'pending' || s.status === 'failed') ? (
+                      (s.status === 'pending' ||
+                        s.status === 'failed' ||
+                        s.status === 'queued') ? (
                         <button
                           type="button"
                           disabled={busy}
                           onClick={() => void onStart(s.id)}
                           className="inline-flex items-center gap-1 rounded-md border border-surface-600 px-2 py-1 text-xs text-surface-200 hover:border-accent hover:text-accent disabled:opacity-50"
+                          title={
+                            s.status === 'queued'
+                              ? t('scans.requeueHint')
+                              : t('scans.start')
+                          }
                         >
                           <Play className="h-3 w-3" />
-                          {t('scans.start')}
+                          {s.status === 'queued'
+                            ? t('scans.requeue')
+                            : t('scans.start')}
                         </button>
                       ) : null}
                     </div>

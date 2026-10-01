@@ -38,10 +38,50 @@ def _load_scan(session: Session, scan_uuid: UUID, task: Any, scan_id: str) -> Sc
         .filter(Scan.id == scan_uuid)
         .one_or_none()
     )
-    if scan is None:
-        logger.warning("Scan %s not found yet — retrying (API commit race)", scan_id)
-        raise task.retry(countdown=2, max_retries=5)
-    return scan
+    if scan is not None:
+        return scan
+
+    retries = int(getattr(task.request, "retries", 0) or 0)
+    max_retries = int(task.max_retries if task.max_retries is not None else 5)
+    if retries >= max_retries:
+        logger.error(
+            "Scan %s not found after %s retries — marking failed if row appears later",
+            scan_id,
+            retries,
+        )
+        _mark_scan_failed_detached(
+            scan_id,
+            "Scan row not visible to worker after retries (DB commit/race or wrong DB).",
+        )
+        raise RuntimeError(f"scan {scan_id} not found after retries")
+
+    logger.warning("Scan %s not found yet — retrying (API commit race)", scan_id)
+    raise task.retry(countdown=2)
+
+
+def _mark_scan_failed_detached(scan_id: str, message: str) -> None:
+    """Best-effort FAIL update outside the caller's session (retry exhaustion)."""
+    try:
+        scan_uuid = UUID(str(scan_id))
+    except ValueError:
+        return
+    try:
+        with session_scope() as session:
+            scan = session.query(Scan).filter(Scan.id == scan_uuid).one_or_none()
+            if scan is None:
+                return
+            if scan.status in {
+                ScanStatus.QUEUED,
+                ScanStatus.PENDING,
+                ScanStatus.RUNNING,
+            }:
+                scan.status = ScanStatus.FAILED
+                scan.progress = 100.0
+                scan.error_message = message[:2000]
+                scan.completed_at = _utcnow()
+                session.add(scan)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to mark scan %s as failed", scan_id)
 
 
 def _utcnow() -> datetime:
@@ -206,13 +246,24 @@ def _maybe_enqueue_pipeline_next(session: Session, scan: Scan) -> Optional[str]:
     if follow is None:
         logger.warning("Pipeline next scan %s not found", next_id)
         return None
-    if follow.status not in {ScanStatus.PENDING, ScanStatus.FAILED}:
+    if follow.status not in {ScanStatus.PENDING, ScanStatus.FAILED, ScanStatus.QUEUED}:
         logger.info(
             "Skipping pipeline next %s (status=%s)", follow.id, follow.status
         )
         return None
+    # Avoid double-fire if already running/completed; QUEUED without worker is requeueable.
 
     engine = follow.engine
+    fcfg = dict(follow.config or {})
+    fcfg["pipeline_triggered_by"] = str(scan.id)
+    follow.config = fcfg
+    follow.status = ScanStatus.QUEUED
+    follow.error_message = None
+    follow.progress = 0.0
+    session.add(follow)
+    # Commit before broker publish so scanner-worker can see the row (same race as API enqueue).
+    session.commit()
+
     try:
         if engine == ScannerEngine.NMAP:
             async_result = run_nmap_scan.delay(str(follow.id))
@@ -226,17 +277,20 @@ def _maybe_enqueue_pipeline_next(session: Session, scan: Scan) -> Optional[str]:
             async_result = run_zap_scan.delay(str(follow.id))
         else:
             logger.warning("Pipeline next engine unsupported: %s", engine)
+            follow.status = ScanStatus.FAILED
+            follow.error_message = f"Unsupported pipeline engine: {engine}"
+            session.add(follow)
+            session.commit()
             return None
     except Exception:  # noqa: BLE001
         logger.exception("Failed to enqueue pipeline next scan %s", follow.id)
+        follow.status = ScanStatus.FAILED
+        follow.error_message = "Failed to publish Celery task for pipeline VA stage"
+        session.add(follow)
+        session.commit()
         return None
 
-    follow.status = ScanStatus.QUEUED
     follow.celery_task_id = async_result.id
-    follow.error_message = None
-    fcfg = dict(follow.config or {})
-    fcfg["pipeline_triggered_by"] = str(scan.id)
-    follow.config = fcfg
     session.add(follow)
     session.flush()
     logger.info(

@@ -119,6 +119,9 @@ const en = {
     createFailed: 'Failed to create scan',
     startFailed: 'Failed to start scan',
     start: 'Start',
+    requeue: 'Requeue',
+    requeueHint:
+      'Resubmit this QUEUED job to the scanner worker (use if stuck after discovery).',
     engagementPdf: 'Engagement PDF',
     engagementPdfExported: 'Downloaded engagement PDF for “{name}”.',
     engagementFailed: 'Engagement report export failed',
@@ -598,6 +601,9 @@ const id: Messages = {
     createFailed: 'Gagal membuat scan',
     startFailed: 'Gagal memulai scan',
     start: 'Mulai',
+    requeue: 'Antre ulang',
+    requeueHint:
+      'Kirim ulang job QUEUED ke scanner-worker (pakai jika macet setelah discovery).',
     engagementPdf: 'PDF Engagement',
     engagementPdfExported: 'PDF engagement untuk “{name}” diunduh.',
     engagementFailed: 'Ekspor laporan engagement gagal',

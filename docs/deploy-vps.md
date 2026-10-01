@@ -306,7 +306,8 @@ docker compose up -d --force-recreate api scanner-worker
 | CORS error di browser | `CORS_ORIGINS` harus exact (`https://nexusec.my.id`) |
 | `JSON decode error` saat register | Body curl kosong/rusak — pakai `-d @file.json` |
 | Password ditolak | Minimal 12 karakter |
-| Scan stuck `queued` | `docker compose logs scanner-worker worker` |
+| Scan stuck `queued` | `docker compose ps` — pastikan `scanner-worker` Up. `docker compose logs scanner-worker --tail 100`. Lalu **Requeue** di UI, atau: `docker compose up -d --force-recreate scanner-worker` |
+| Pipeline discovery OK, VA stuck queued | Worker `scans` queue tidak konsumsi nuclei task — recreate `scanner-worker`; klik **Requeue** pada baris VA |
 | Target private ditolak | `SCAN_BLOCK_PRIVATE_TARGETS=true` — set `false` hanya untuk lab LAN, lalu recreate `api` + `scanner-worker` |
 | 429 Too Many Requests | Rate limit aktif (`RATE_LIMIT_ENABLED`); tunggu window atau naikkan hanya jika perlu |
 | Client PDF ditolak (dual-control) | Admin harus **Approve client** dulu untuk scope yang sama; atau pakai Draft PDF |
